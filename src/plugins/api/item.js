@@ -7,21 +7,161 @@ async function plugin(fastify, options) {
     };
   });
 
-  fastify.get("/items/:id", async (request, reply) => {
-    const { id } = request.params;
-    return {
-      msg: `GET /items/${id}`,
-    };
-  });
+  const singleItemJsonSchema = {
+    params: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "number" },
+      },
+    },
+    response: {
+      200: {
+        type: "object",
+        properties: {
+          id: { type: "number" },
+          name: { type: "string" },
+          alias: { type: "string" },
+          description: { type: "string" },
+          addedAt: { type: "number" },
+          updatedAt: { type: "number" },
+          purchasedAt: { type: "number" },
+          value: { type: "number" },
+          currencyCode: { type: "string" },
+          lifeSpan: { type: "number" },
+          isFavorite: { type: "boolean" },
+          isArchived: { type: "boolean" },
+        },
+      },
+    },
+  };
 
-  fastify.get("/items", async (request, reply) => {
-    const { userId, currencyCode } = request.query;
-    const items = await itemService.getItems(userId, currencyCode, {});
-    return {
-      msg: "GET /items",
-      data: items,
-    };
-  });
+  fastify.get(
+    "/items/:id",
+    { schema: singleItemJsonSchema },
+    async (request, reply) => {
+      const userId = request.auth.userId;
+      const { id } = request.params;
+
+      const item = await itemService.getItem(userId, id);
+
+      return item;
+    }
+  );
+
+  const multipleItemJsonSchema = {
+    querystring: {
+      type: "object",
+      properties: {
+        cursor: {
+          type: "object",
+          properties: {
+            value: { type: ["number", "string"] },
+            base: { type: "string", enum: ["added_at", "name", "alias", "purchased_at", "value", "life_span", "current_value", "life_span_left"] },
+            order: { type: "string", enum: ["ASC", "DESC"] },
+          },
+        },
+        name: { type: "string" },
+        alias: { type: "string" },
+        purchasedTimeRange: {
+          type: "object",
+          properties: {
+            min: { type: "number" },
+            max: { type: "number" },
+          },
+        },
+        valueRange: {
+          type: "object",
+          properties: {
+            min: { type: "number" },
+            max: { type: "number" },
+          },
+        },
+        currencyCode: {
+          type: "string",
+        },
+        lifeSpanRange: {
+          type: "object",
+          properties: {
+            min: { type: "number" },
+            max: { type: "number" },
+          },
+        },
+        isFavorite: {
+          type: "boolean",
+        },
+        isArchived: {
+          type: "boolean",
+        },
+      },
+    },
+    response: {
+      200: {
+        type: "object",
+        properties: {
+          cursor: { type: "number" },
+          data: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                alias: { type: "string" },
+                description: { type: "string" },
+                addedAt: { type: "number" },
+                updatedAt: { type: "number" },
+                purchasedAt: { type: "number" },
+                value: { type: "number" },
+                currencyCode: { type: "string" },
+                lifeSpan: { type: "number" },
+                isFavorite: { type: "boolean" },
+                isArchived: { type: "boolean" },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  fastify.get(
+    "/items",
+    { schema: multipleItemJsonSchema },
+    async (request, reply) => {
+      const userId = request.auth.userId;
+      const {
+        cursor, // TODO destructure this to make it compatible with query string
+        name,
+        alias,
+        description,
+        addedAt,
+        updatedAt,
+        purchasedAt,
+        value,
+        currencyCode,
+        lifeSpan,
+        isFavorite,
+        isArchived,
+      } = request.query;
+
+      const items = await itemService.getItems(userId, {
+        cursor,
+        name,
+        alias,
+        description,
+        addedAt,
+        updatedAt,
+        purchasedAt,
+        value,
+        currencyCode,
+        lifeSpan,
+        isFavorite,
+        isArchived,
+      });
+
+      return items;
+    }
+  );
 
   fastify.patch("/items/:id", async (request, reply) => {
     const { id } = request.params;

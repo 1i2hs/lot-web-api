@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon bin/server.js",
+    "start": "NODE_ENV=dev nodemon bin/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -19,6 +19,7 @@
     "pg": "^8.7.1"
   },
   "devDependencies": {
-    "nodemon": "^2.0.15"
+    "nodemon": "^2.0.15",
+    "pino-pretty": "^7.3.0"
   }
 }

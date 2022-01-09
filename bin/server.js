@@ -1,7 +1,8 @@
 async function start() {
   const server = await require("../src/app")({
-    logger: true,
-    prettyPrint: true,
+    logger: {
+      prettyPrint: process.env.NODE_ENV === "production" ? false : true,
+    },
   });
   server.listen(3000, (error, address) => {
     if (error) {

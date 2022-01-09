@@ -6,6 +6,44 @@ class ItemModule {
   constructor(dbPool, logger) {
     this.dbPool = dbPool;
     this.logger = logger;
+    this.cursorToWhereMap = {
+      added_at: {
+        DESC: (value) => [
+          `added_at < $?`,
+          dayjs.utc(value).format("YYYY-MM-DD HH:mm:ssZZ"),
+        ],
+        ASC: (value) => [
+          `added_at > $?`,
+          dayjs.utc(value).format("YYYY-MM-DD HH:mm:ssZZ"),
+        ],
+      },
+      name: {
+        DESC: (value) => [`name < $?`, value],
+        ASC: (value) => [`name > $?`, value],
+      },
+      name: {
+        DESC: (value) => [`alias < $?`, value],
+        ASC: (value) => [`alias > $?`, value],
+      },
+      purchased_at: {
+        DESC: (value) => [
+          `purchased_at < $?`,
+          dayjs.utc(value).format("YYYY-MM-DD HH:mm:ssZZ"),
+        ],
+        ASC: (value) => [
+          `purchased_at > $?`,
+          dayjs.utc(value).format("YYYY-MM-DD HH:mm:ssZZ"),
+        ],
+      },
+      value: {
+        DESC: (value) => [`value < $?`, value],
+        ASC: (value) => [`value > $?`, value],
+      },
+      life_span: {
+        DESC: (value) => [`life_span < $?`, value],
+        ASC: (value) => [`life_span > $?`, value],
+      },
+    };
   }
 
   async createItem({
@@ -16,10 +54,10 @@ class ItemModule {
     purchasedAt, // unix time
     value,
     currencyCode,
-    lifeSpan,
+    lifeSpan, // seconds
     tags,
   }) {
-    const nowTimestamp = dayjs.utc().format("YYYY-MM-DD HH:mm:ss");
+    const nowTimestamp = dayjs.utc().format("YYYY-MM-DD HH:mm:ssZZ");
     const item = {
       ownerId,
       name,
@@ -27,9 +65,8 @@ class ItemModule {
       description,
       addedAt: nowTimestamp,
       updatedAt: nowTimestamp,
-      purchasedAt: dayjs.utc(purchasedAt).format("YYYY-MM-DD HH:mm:ss"),
+      purchasedAt: dayjs.utc(purchasedAt).format("YYYY-MM-DD HH:mm:ssZZ"),
       value,
-      currentValue: value,
       currencyCode,
       lifeSpan,
       isFavorite: false,
@@ -44,7 +81,7 @@ class ItemModule {
     try {
       await client.query("BEGIN");
 
-      const insertItemQuery = `INSERT INTO lot.items(owner_id, name, alias, description, added_at, updated_at, purchased_at, value, current_value, currency_code, life_span, is_favorite, is_archived) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`;
+      const insertItemQuery = `INSERT INTO lot.items(owner_id, name, alias, description, added_at, updated_at, purchased_at, value, currency_code, life_span, is_favorite, is_archived) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`;
 
       const { rows: itemRows } = await client.query(insertItemQuery, [
         item.ownerId,
@@ -55,7 +92,6 @@ class ItemModule {
         item.updatedAt,
         item.purchasedAt,
         item.value,
-        item.currentValue,
         item.currencyCode,
         item.lifeSpan,
         item.isFavorite,
@@ -101,8 +137,7 @@ class ItemModule {
       throw new AppError(
         commonErrors.databaseError,
         `Could not create a new item`,
-        true,
-        500
+        true
       );
     } finally {
       client.release();
@@ -111,22 +146,46 @@ class ItemModule {
 
   async getItems(
     ownerId,
-    currencyCode,
     {
+      cursor,
       name,
       alias,
       purchasedTimeRange,
       valueRange,
-      currentValueRange,
       lifeSpanRange,
+      currencyCode,
       isFavorite,
       isArchived,
     }
   ) {
-    const wheres = [
-      [`owner_id = $1`, ownerId],
-      [`currency_code = $2`, currencyCode],
-    ];
+    const order = {
+      base: cursor?.base ?? "added_at",
+      direction: cursor?.order ?? "DESC",
+    };
+
+    const _cursor = cursor?.value;
+
+    const nestedQueryRequired =
+      order.base === "life_span" || order.base === "life_span_left";
+
+    const wheres = [[`owner_id = $?`, ownerId]];
+
+    const cursorWhereFn = this.cursorToWhereMap[order.base]?.[order.direction];
+    if (cursorWhereFn === undefined) {
+      throw new AppError(
+        commonErrors.fatalError,
+        `Incompatible field ${order.base} is given to query results`,
+        true
+      );
+    }
+
+    if (!util.isNil(_cursor)) {
+      if (!nestedQueryRequired) {
+        const where = cursorWhereFn(_cursor);
+        wheres.push(where);
+      }
+    }
+
     if (!util.isNil(name)) {
       wheres.push([`name LIKE %$?%`, name]);
     }
@@ -138,61 +197,65 @@ class ItemModule {
     if (!util.isNil(purchasedTimeRange)) {
       const { min, max } = purchasedTimeRange;
       if (!util.isNil(min)) {
-        wheres.push([`purchased_at >= ?`, min]);
+        wheres.push([
+          `purchased_at >= $?`,
+          dayjs.utc(min).format("YYYY-MM-DD HH:mm:ssZZ"),
+        ]);
       }
 
       if (!util.isNil(max)) {
-        wheres.push([`purchased_at <= ?`, max]);
+        wheres.push([
+          `purchased_at <= $?`,
+          dayjs.utc(max).format("YYYY-MM-DD HH:mm:ssZZ"),
+        ]);
       }
     }
 
     if (!util.isNil(valueRange)) {
       const { min, max } = valueRange;
       if (!util.isNil(min)) {
-        wheres.push([`value >= ?`, min]);
+        wheres.push([`value >= $?`, min]);
       }
 
       if (!util.isNil(max)) {
-        wheres.push([`value <= ?`, max]);
-      }
-    }
-
-    if (!util.isNil(currentValueRange)) {
-      const { min, max } = currentValueRange;
-      if (!util.isNil(min)) {
-        wheres.push([`current_value >= ?`, min]);
-      }
-
-      if (!util.isNil(max)) {
-        wheres.push([`current_value <= ?`, max]);
+        wheres.push([`value <= $?`, max]);
       }
     }
 
     if (!util.isNil(lifeSpanRange)) {
       const { min, max } = lifeSpanRange;
       if (!util.isNil(min)) {
-        wheres.push([`life_span >= ?`, min]);
+        wheres.push([`life_span >= $?`, min]);
       }
 
       if (!util.isNil(max)) {
-        wheres.push([`life_span <= ?`, max]);
+        wheres.push([`life_span <= $?`, max]);
       }
     }
 
+    if (!util.isNil(currencyCode)) {
+      wheres.push([`currency_code = $?`, currencyCode]);
+    }
+
     if (!util.isNil(isFavorite)) {
-      wheres.push([`is_favorite = ?`, isFavorite]);
+      wheres.push([`is_favorite = $?`, isFavorite]);
     }
 
     if (!util.isNil(isArchived)) {
-      wheres.push([`is_archived = ?`, isArchived]);
+      wheres.push([`is_archived = $?`, isArchived]);
     }
 
+    let parameterIndex = 0;
     const { clause, values } = wheres.reduce(
       (agg, [clause, value], index) => {
+        parameterIndex = index + 1;
         if (index > 0) {
-          agg.clause = `${agg.clause} AND ${clause.replace("?", index + 1)}`;
+          agg.clause = `${agg.clause} AND ${clause.replace(
+            "?",
+            parameterIndex
+          )}`;
         } else {
-          agg.clause = clause;
+          agg.clause = clause.replace("?", parameterIndex);
         }
         agg.values.push(value);
         return agg;
@@ -200,40 +263,137 @@ class ItemModule {
       { clause: "", values: [] }
     );
 
-    const query = `SELECT * FROM lot.items WHERE ${clause}`;
+    if (nestedQueryRequired) {
+      values.push(_cursor);
+    }
 
-    const { rows } = await this.dbPool.query(query, values);
+    try {
+      /**
+       * candidates of ORDER BY:
+       * - added_at(default, which works like the id)
+       * - name(alphabetical order)
+       * - purchased_at
+       * - value
+       * - current value(need calculation)
+       * - life_span
+       * - life_span_left(need calculation)
+       */
+      const query = !nestedQueryRequired
+        ? `
+SELECT
+    i.*,
+    ROUND(i.value * EXTRACT(EPOCH FROM (now() - i.purchased_at)) / i.life_span)              AS current_value, -- value * (today - purchased_at) / life_span
+    ROUND((EXTRACT(EPOCH FROM (now() - i.purchased_at)) / i.life_span * 100)::numeric, 2)    AS life_percentage, -- (today - purchased_at) / life_span * 100
+    json_agg(to_jsonb(t.*) - 'owner_id') AS tags
+FROM lot.items i
+LEFT OUTER JOIN lot.items_to_tags itt ON itt.owner_id = i.owner_id AND itt.item_id = i.id
+LEFT OUTER JOIN lot.tags t ON t.owner_id = itt.owner_id AND t.id = itt.tag_id
+WHERE ${clause}
+GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated_at, i.purchased_at, i.value, i.currency_code, i.life_span, i.is_favorite, i.is_archived
+ORDER BY i.${order.base} ${order.direction}
+LIMIT 100`
+        : `
+SELECT * FROM (
+    SELECT
+        i.*,
+        ROUND(i.value * EXTRACT(EPOCH FROM (now() - i.purchased_at)) / i.life_span)              AS current_value, -- value * (today - purchased_at) / life_span
+        ROUND((EXTRACT(EPOCH FROM (now() - i.purchased_at)) / i.life_span * 100)::numeric, 2)    AS life_percentage, -- (today - purchased_at) / life_span * 100
+        json_agg(to_jsonb(t.*) - 'owner_id') AS tags
+    FROM lot.items i
+    LEFT OUTER JOIN lot.items_to_tags itt ON itt.owner_id = i.owner_id AND itt.item_id = i.id
+    LEFT OUTER JOIN lot.tags t ON t.owner_id = itt.owner_id AND t.id = itt.tag_id
+    WHERE ${clause}
+    GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated_at, i.purchased_at, i.value, i.currency_code, i.life_span, i.is_favorite, i.is_archived
+) 
+WHERE ${order.base} ${
+            order.direction === "ASC" ? ">" : "<"
+          } $${++parameterIndex}
+LIMIT 100`;
 
-    const result =
-      rows.length > 0
-        ? rows.map((row) => ({
-            id: row.id,
-            name: row.name,
-            alias: row.alias,
-            description: row.description,
-            addedAt: row.added_at,
-            updatedAt: row.updated_at,
-            purchasedAt: row.purchased_at,
-            value: row.value,
-            currentValue: row.current_value,
-            currencyCode: row.currency_code,
-            lifeSpan: row.life_span,
-            isFavorite: row.is_favorite,
-            isArchived: row.is_archived,
-          }))
-        : [];
+      const { rows } = await this.dbPool.query(query, values);
 
-    return result;
+      const result =
+        rows.length > 0
+          ? {
+              cursor: rows[rows.length - 1][order.base],
+              data: rows.map((row) => ({
+                id: row.id,
+                name: row.name,
+                alias: row.alias,
+                description: row.description,
+                addedAt: dayjs.utc(row.added_at).unix(),
+                updatedAt: dayjs.utc(row.updated_at).unix(),
+                purchasedAt: dayjs.utc(row.purchased_at).unix(),
+                value: row.value,
+                currentValue: row.current_value,
+                lifePercentage: row.life_percentage,
+                currencyCode: row.currency_code,
+                lifeSpan: row.life_span,
+                isFavorite: row.is_favorite,
+                isArchived: row.is_archived,
+              })),
+            }
+          : {
+              cursor: null,
+              data: [],
+            };
+
+      return result;
+    } catch (error) {
+      this.logger.error(`IM::getItems: ${error.stack}`);
+      throw new AppError(
+        commonErrors.databaseError,
+        `Could not get items`,
+        true
+      );
+    }
   }
 
-  async getItem(id, ownerId) {
-    const query = `SELECT * FROM lot.items WHERE id = $1 AND owner_id = $2`;
+  async getItem(ownerId, id) {
+    try {
+      const query = `
+SELECT
+    i.*,
+    ROUND(i.value * EXTRACT(EPOCH FROM (now() - i.purchased_at)) / i.life_span)              AS current_value, -- value * (today - purchased_at) / life_span
+    ROUND((EXTRACT(EPOCH FROM (now() - i.purchased_at)) / i.life_span * 100)::numeric, 2)    AS life_percentage, -- (today - purchased_at) / life_span * 100
+    json_agg(to_jsonb(t.*) - 'owner_id') AS tags
+FROM lot.items i
+LEFT OUTER JOIN lot.items_to_tags itt ON itt.owner_id = i.owner_id AND itt.item_id = i.id
+LEFT OUTER JOIN lot.tags t ON t.owner_id = itt.owner_id AND t.id = itt.tag_id
+WHERE i.id = $1 AND i.owner_id = $2
+GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated_at, i.purchased_at, i.value, i.currency_code, i.life_span, i.is_favorite, i.is_archived`;
 
-    const { rows } = await this.dbPool.query(query, [id, ownerId]);
+      const { rows } = await this.dbPool.query(query, [id, ownerId]);
 
-    const result = rows.length > 0 ? rows[0] : null;
+      const result =
+        rows.length > 0
+          ? {
+              id: rows[0].id,
+              name: rows[0].name,
+              alias: rows[0].alias,
+              description: rows[0].description,
+              addedAt: dayjs.utc(rows[0].added_at).unix(),
+              updatedAt: dayjs.utc(rows[0].updated_at).unix(),
+              purchasedAt: dayjs.utc(rows[0].purchased_at).unix(),
+              value: rows[0].value,
+              currentValue: rows[0].current_value,
+              lifePercentage: rows[0].life_percentage,
+              currencyCode: rows[0].currency_code,
+              lifeSpan: rows[0].life_span,
+              isFavorite: rows[0].is_favorite,
+              isArchived: rows[0].is_archived,
+            }
+          : null;
 
-    return result;
+      return result;
+    } catch (error) {
+      this.logger.error(`IM::getItem: ${error.stack}`);
+      throw new AppError(
+        commonErrors.databaseError,
+        `Could not get an item #${id}`,
+        true
+      );
+    }
   }
 
   async updateItem(
@@ -246,7 +406,6 @@ class ItemModule {
       updatedAt,
       purchasedAt,
       value,
-      currentValue,
       currencyCode,
       lifeSpan,
       isFavorite,
@@ -257,50 +416,46 @@ class ItemModule {
     const sets = [];
 
     if (!util.isNil(name)) {
-      sets.push([`name = %$?%`, name]);
+      sets.push([`name = $?`, name]);
     }
 
     if (!util.isNil(alias)) {
-      sets.push([`alias = %$?%`, alias]);
+      sets.push([`alias = $?`, alias]);
     }
 
     if (!util.isNil(description)) {
-      sets.push([`description = %$?%`, description]);
+      sets.push([`description = $?`, description]);
     }
 
     if (!util.isNil(updatedAt)) {
       sets.push([
-        `updated_at = %$?%`,
-        dayjs.utc(updatedAt).format("YYYY-MM-DD HH:mm:ss"),
+        `updated_at = $?`,
+        dayjs.utc(updatedAt).format("YYYY-MM-DD HH:mm:ssZZ"),
       ]);
     }
 
     if (!util.isNil(purchasedAt)) {
-      sets.push([`purchased_at = %$?%`, purchasedAt]);
+      sets.push([`purchased_at = $?`, purchasedAt]);
     }
 
     if (!util.isNil(value)) {
-      sets.push([`value = %$?%`, value]);
-    }
-
-    if (!util.isNil(currentValue)) {
-      sets.push([`current_value = %$?%`, currentValue]);
+      sets.push([`value = $?`, value]);
     }
 
     if (!util.isNil(currencyCode)) {
-      sets.push([`currency_code = %$?%`, currencyCode]);
+      sets.push([`currency_code = $?`, currencyCode]);
     }
 
     if (!util.isNil(lifeSpan)) {
-      sets.push([`life_span = %$?%`, lifeSpan]);
+      sets.push([`life_span = $?`, lifeSpan]);
     }
 
     if (!util.isNil(isFavorite)) {
-      sets.push([`is_favorite = %$?%`, isFavorite]);
+      sets.push([`is_favorite = $?`, isFavorite]);
     }
 
     if (!util.isNil(isArchived)) {
-      sets.push([`is_archived = %$?%`, isArchived]);
+      sets.push([`is_archived = $?`, isArchived]);
     }
 
     let parameterIndex = 0;
@@ -386,10 +541,10 @@ class ItemModule {
 
       const selectUpdatedItemQuery = `
 SELECT i.*, json_agg(to_jsonb(t.*) - 'owner_id') AS tags FROM lot.items i 
-INNER JOIN lot.items_to_tags itt ON itt.owner_id = i.owner_id AND itt.item_id = i.id
-INNER JOIN lot.tags t ON t.owner_id = itt.owner_id AND t.id = itt.tag_id
+LEFT OUTER JOIN lot.items_to_tags itt ON itt.owner_id = i.owner_id AND itt.item_id = i.id
+LEFT OUTER JOIN lot.tags t ON t.owner_id = itt.owner_id AND t.id = itt.tag_id
 WHERE i.owner_id = $1 AND i.id = $2
-GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated_at, i.purchased_at, i.value, i.current_value, i.currency_code, i.life_span, i.is_favorite, i.is_archived`;
+GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated_at, i.purchased_at, i.value, i.currency_code, i.life_span, i.is_favorite, i.is_archived`;
 
       const { rows: itemRows } = await client.query(selectUpdatedItemQuery, [
         ownerId,
@@ -405,7 +560,6 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
         result.updatedAt = dayjs.utc(itemRows[0].updated_at).unix();
         result.purchasedAt = dayjs.utc(itemRows[0].purchased_at).unix();
         result.value = itemRows[0].value;
-        result.currentValue = itemRows[0].current_value;
         result.currencyCode = itemRows[0].currency_code;
         result.lifeSpan = itemRows[0].life_span;
         result.isFavorite = itemRows[0].is_favorite;
@@ -423,8 +577,7 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
       throw new AppError(
         commonErrors.databaseError,
         `Could not update an item #'${id}'`,
-        true,
-        500
+        true
       );
     } finally {
       client.release();
@@ -474,8 +627,7 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
       throw new AppError(
         commonErrors.databaseError,
         `Could not update an item #'${id}'`,
-        true,
-        500
+        true
       );
     } finally {
       client.release();

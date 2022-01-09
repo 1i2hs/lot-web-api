@@ -6,35 +6,37 @@ class ItemService {
 
   async getItems(
     ownerId,
-    currencyCode,
     {
+      cursor,
       name,
       alias,
       purchasedTimeRange,
       valueRange,
-      currentValueRange,
+      currencyCode,
       lifeSpanRange,
       isFavorite,
       isArchived,
     }
   ) {
-    try {
-      const result = await this.itemModule.getItems(ownerId, currencyCode, {
-        name,
-        alias,
-        purchasedTimeRange,
-        valueRange,
-        currentValueRange,
-        lifeSpanRange,
-        isFavorite,
-        isArchived,
-      });
+    const result = await this.itemModule.getItems(ownerId, {
+      cursor,
+      name,
+      alias,
+      purchasedTimeRange,
+      valueRange,
+      currencyCode,
+      lifeSpanRange,
+      isFavorite,
+      isArchived,
+    });
 
-      return result;
-    } catch (error) {
-      this.logger.error(`IS::getItems: ${error.stack}`);
-      return null;
-    }
+    return result;
+  }
+
+  async getItem(ownerId, id) {
+    const result = await this.itemModule.getItem(ownerId, id);
+
+    return result;
   }
 }
 
