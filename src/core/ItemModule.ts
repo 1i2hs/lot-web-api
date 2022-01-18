@@ -1,62 +1,77 @@
-const dayjs = require("dayjs");
-const { AppError, commonErrors } = require("../error");
-const util = require("../misc/util");
+import { FastifyLoggerInstance } from "fastify";
+import dayjs from "dayjs";
+import "dayjs/plugin/utc.js";
+import { IDBPool } from "../data-access";
+import { Item, PaginationCursor, Tag } from "../model";
+import { AppError, commonErrors } from "../error";
+import * as util from "../misc/util";
+import { ItemFilterOption } from "../types";
+import PaginatedData from "../model/PaginatedData";
 
 class ItemModule {
-  constructor(dbPool, logger) {
+  private readonly dbPool: IDBPool;
+  private readonly logger: FastifyLoggerInstance;
+  private readonly cursorToWhereMap: Record<
+    string,
+    {
+      DESC(value: number | string): [string, number | string];
+      ASC(value: number | string): [string, number | string];
+    }
+  > = {
+    added_at: {
+      DESC: (value: number): [string, string] => [
+        `added_at < $?`,
+        dayjs.utc(value).format("YYYY-MM-DD HH:mm:ssZZ"),
+      ],
+      ASC: (value: number) => [
+        `added_at > $?`,
+        dayjs.utc(value).format("YYYY-MM-DD HH:mm:ssZZ"),
+      ],
+    },
+    name: {
+      DESC: (value: string) => [`name < $?`, value],
+      ASC: (value: string) => [`name > $?`, value],
+    },
+    alias: {
+      DESC: (value: string) => [`alias < $?`, value],
+      ASC: (value: string) => [`alias > $?`, value],
+    },
+    purchased_at: {
+      DESC: (value: number) => [
+        `purchased_at < $?`,
+        dayjs.utc(value).format("YYYY-MM-DD HH:mm:ssZZ"),
+      ],
+      ASC: (value: number) => [
+        `purchased_at > $?`,
+        dayjs.utc(value).format("YYYY-MM-DD HH:mm:ssZZ"),
+      ],
+    },
+    value: {
+      DESC: (value: number) => [`value < $?`, value],
+      ASC: (value: number) => [`value > $?`, value],
+    },
+    life_span: {
+      DESC: (value: number) => [`life_span < $?`, value],
+      ASC: (value: number) => [`life_span > $?`, value],
+    },
+  };
+
+  constructor(dbPool: IDBPool, logger: FastifyLoggerInstance) {
     this.dbPool = dbPool;
     this.logger = logger;
-    this.cursorToWhereMap = {
-      added_at: {
-        DESC: (value) => [
-          `added_at < $?`,
-          dayjs.utc(value).format("YYYY-MM-DD HH:mm:ssZZ"),
-        ],
-        ASC: (value) => [
-          `added_at > $?`,
-          dayjs.utc(value).format("YYYY-MM-DD HH:mm:ssZZ"),
-        ],
-      },
-      name: {
-        DESC: (value) => [`name < $?`, value],
-        ASC: (value) => [`name > $?`, value],
-      },
-      name: {
-        DESC: (value) => [`alias < $?`, value],
-        ASC: (value) => [`alias > $?`, value],
-      },
-      purchased_at: {
-        DESC: (value) => [
-          `purchased_at < $?`,
-          dayjs.utc(value).format("YYYY-MM-DD HH:mm:ssZZ"),
-        ],
-        ASC: (value) => [
-          `purchased_at > $?`,
-          dayjs.utc(value).format("YYYY-MM-DD HH:mm:ssZZ"),
-        ],
-      },
-      value: {
-        DESC: (value) => [`value < $?`, value],
-        ASC: (value) => [`value > $?`, value],
-      },
-      life_span: {
-        DESC: (value) => [`life_span < $?`, value],
-        ASC: (value) => [`life_span > $?`, value],
-      },
-    };
   }
 
-  async createItem({
-    ownerId,
-    name,
-    alias,
-    description,
-    purchasedAt, // unix time
-    value,
-    currencyCode,
-    lifeSpan, // seconds
-    tags,
-  }) {
+  public async createItem(
+    ownerId: string,
+    name: string,
+    alias: string,
+    description: string,
+    purchasedAt: number, // unix time
+    value: number,
+    currencyCode: string,
+    lifeSpan: number, // unix time (seconds)
+    tags: Array<Tag>
+  ): Promise<Item> {
     const nowTimestamp = dayjs.utc().format("YYYY-MM-DD HH:mm:ssZZ");
     const item = {
       ownerId,
@@ -65,7 +80,7 @@ class ItemModule {
       description,
       addedAt: nowTimestamp,
       updatedAt: nowTimestamp,
-      purchasedAt: dayjs.utc(purchasedAt).format("YYYY-MM-DD HH:mm:ssZZ"),
+      purchasedAt: dayjs.unix(purchasedAt).format("YYYY-MM-DD HH:mm:ssZZ"),
       value,
       currencyCode,
       lifeSpan,
@@ -73,17 +88,13 @@ class ItemModule {
       isArchived: false,
     };
 
-    const result = {
-      ...item,
-      tags: [],
-    };
-    const client = this.dbPool.getClient();
+    const client = await this.dbPool.getClient();
     try {
       await client.query("BEGIN");
 
       const insertItemQuery = `INSERT INTO lot.items(owner_id, name, alias, description, added_at, updated_at, purchased_at, value, currency_code, life_span, is_favorite, is_archived) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`;
 
-      const { rows: itemRows } = await client.query(insertItemQuery, [
+      const itemRows = await client.query(insertItemQuery, [
         item.ownerId,
         item.name,
         item.alias,
@@ -99,7 +110,23 @@ class ItemModule {
       ]);
 
       const id = itemRows[0].id;
-      result.id = id;
+
+      const result: Item = {
+        ownerId,
+        id,
+        name: itemRows[0].name,
+        alias: itemRows[0].alias,
+        description: itemRows[0].description,
+        addedAt: dayjs.utc(itemRows[0].added_at).unix(),
+        updatedAt: dayjs.utc(itemRows[0].updated_at).unix(),
+        purchasedAt: dayjs.utc(itemRows[0].purchased_at).unix(),
+        value: itemRows[0].value,
+        currencyCode: itemRows[0].currency_code,
+        lifeSpan: itemRows[0].life_span,
+        isFavorite: itemRows[0].is_favorite,
+        isArchived: itemRows[0].is_archived,
+        tags: [],
+      };
 
       const insertTagQuery = `INSERT INTO lot.tags(owner_id, name) VALUES ($1, $2) ON CONFLICT (owner_id, name) DO NOTHING RETURNING id`;
 
@@ -108,7 +135,7 @@ class ItemModule {
       for (const tag of tags) {
         let tagId = tag.id;
         if (tag.id === -1) {
-          const { rows: tagRows } = await client.query(insertTagQuery, [
+          const tagRows = await client.query(insertTagQuery, [
             ownerId,
             tag.name,
           ]);
@@ -116,7 +143,8 @@ class ItemModule {
           if (tagRows.length === 0) {
             throw new AppError(
               commonErrors.databaseError,
-              `Could not create a new tag '${tag.name}'`
+              `Could not create a new tag '${tag.name}'`,
+              true
             );
           }
 
@@ -132,7 +160,9 @@ class ItemModule {
     } catch (error) {
       await client.query("ROLLBACK");
 
-      this.logger.error(`IM::createItem: ${error.stack}`);
+      if (error instanceof Error) {
+        this.logger.error(`IM::createItem: ${error.stack}`);
+      }
 
       throw new AppError(
         commonErrors.databaseError,
@@ -144,9 +174,11 @@ class ItemModule {
     }
   }
 
-  async getItems(
-    ownerId,
-    {
+  public async getItems(
+    ownerId: string,
+    options: ItemFilterOption
+  ): Promise<PaginatedData<Item>> {
+    const {
       cursor,
       name,
       alias,
@@ -156,8 +188,8 @@ class ItemModule {
       currencyCode,
       isFavorite,
       isArchived,
-    }
-  ) {
+    } = options;
+
     const order = {
       base: cursor?.base ?? "added_at",
       direction: cursor?.order ?? "DESC",
@@ -166,11 +198,14 @@ class ItemModule {
     const _cursor = cursor?.value;
 
     const nestedQueryRequired =
-      order.base === "life_span" || order.base === "life_span_left";
+      order.base === "current_value" || order.base === "life_span_left";
 
-    const wheres = [[`owner_id = $?`, ownerId]];
+    const wheres: Array<[string, number | string | boolean]> = [
+      [`owner_id = $?`, ownerId],
+    ];
 
-    const cursorWhereFn = this.cursorToWhereMap[order.base]?.[order.direction];
+    const cursorWhereFn =
+      this.cursorToWhereMap[order.base]?.[<"ASC" | "DESC">order.direction];
     if (cursorWhereFn === undefined) {
       throw new AppError(
         commonErrors.fatalError,
@@ -252,15 +287,15 @@ class ItemModule {
         if (index > 0) {
           agg.clause = `${agg.clause} AND ${clause.replace(
             "?",
-            parameterIndex
+            String(parameterIndex)
           )}`;
         } else {
-          agg.clause = clause.replace("?", parameterIndex);
+          agg.clause = clause.replace("?", String(parameterIndex));
         }
         agg.values.push(value);
         return agg;
       },
-      { clause: "", values: [] }
+      { clause: "", values: <Array<number | string | boolean>>[] }
     );
 
     if (nestedQueryRequired) {
@@ -283,6 +318,7 @@ class ItemModule {
 SELECT
     i.*,
     ROUND(i.value * EXTRACT(EPOCH FROM (now() - i.purchased_at)) / i.life_span)              AS current_value, -- value * (today - purchased_at) / life_span
+    i.life_span - EXTRACT(EPOCH FROM (now() - i.purchased_at))                               AS life_span_left, -- life_span - (today - purchased_at)
     ROUND((EXTRACT(EPOCH FROM (now() - i.purchased_at)) / i.life_span * 100)::numeric, 2)    AS life_percentage, -- (today - purchased_at) / life_span * 100
     json_agg(to_jsonb(t.*) - 'owner_id') AS tags
 FROM lot.items i
@@ -297,6 +333,7 @@ SELECT * FROM (
     SELECT
         i.*,
         ROUND(i.value * EXTRACT(EPOCH FROM (now() - i.purchased_at)) / i.life_span)              AS current_value, -- value * (today - purchased_at) / life_span
+        i.life_span - EXTRACT(EPOCH FROM (now() - i.purchased_at))                               AS life_span_left, -- life_span - (today - purchased_at)
         ROUND((EXTRACT(EPOCH FROM (now() - i.purchased_at)) / i.life_span * 100)::numeric, 2)    AS life_percentage, -- (today - purchased_at) / life_span * 100
         json_agg(to_jsonb(t.*) - 'owner_id') AS tags
     FROM lot.items i
@@ -310,13 +347,20 @@ WHERE ${order.base} ${
           } $${++parameterIndex}
 LIMIT 100`;
 
-      const { rows } = await this.dbPool.query(query, values);
+      const rows = await this.dbPool.query(query, values);
+
+      const [{ total }] = await this.dbPool.query(
+        "SELECT COUNT(*) AS total FROM lot.items WHERE owner_id = $1",
+        [ownerId]
+      );
 
       const result =
         rows.length > 0
           ? {
+              total,
               cursor: rows[rows.length - 1][order.base],
               data: rows.map((row) => ({
+                ownerId: row.owner_id,
                 id: row.id,
                 name: row.name,
                 alias: row.alias,
@@ -325,22 +369,28 @@ LIMIT 100`;
                 updatedAt: dayjs.utc(row.updated_at).unix(),
                 purchasedAt: dayjs.utc(row.purchased_at).unix(),
                 value: row.value,
-                currentValue: row.current_value,
-                lifePercentage: row.life_percentage,
                 currencyCode: row.currency_code,
                 lifeSpan: row.life_span,
                 isFavorite: row.is_favorite,
                 isArchived: row.is_archived,
+                tags: <Array<Tag>>JSON.parse(row.tags),
+                currentValue: row.current_value,
+                lifeSpanLeft: row.life_span_left,
+                lifePercentage: row.life_percentage,
               })),
             }
           : {
+              total,
               cursor: null,
               data: [],
             };
 
       return result;
     } catch (error) {
-      this.logger.error(`IM::getItems: ${error.stack}`);
+      if (error instanceof Error) {
+        this.logger.error(`IM::getItems: ${error.stack}`);
+      }
+
       throw new AppError(
         commonErrors.databaseError,
         `Could not get items`,
@@ -349,25 +399,27 @@ LIMIT 100`;
     }
   }
 
-  async getItem(ownerId, id) {
+  public async getItem(ownerId: string, id: number): Promise<Item | null> {
     try {
       const query = `
 SELECT
     i.*,
     ROUND(i.value * EXTRACT(EPOCH FROM (now() - i.purchased_at)) / i.life_span)              AS current_value, -- value * (today - purchased_at) / life_span
+    i.life_span - EXTRACT(EPOCH FROM (now() - i.purchased_at))                               AS life_span_left, -- life_span - (today - purchased_at)
     ROUND((EXTRACT(EPOCH FROM (now() - i.purchased_at)) / i.life_span * 100)::numeric, 2)    AS life_percentage, -- (today - purchased_at) / life_span * 100
     json_agg(to_jsonb(t.*) - 'owner_id') AS tags
 FROM lot.items i
 LEFT OUTER JOIN lot.items_to_tags itt ON itt.owner_id = i.owner_id AND itt.item_id = i.id
 LEFT OUTER JOIN lot.tags t ON t.owner_id = itt.owner_id AND t.id = itt.tag_id
-WHERE i.id = $1 AND i.owner_id = $2
+WHERE i.owner_id = $1 AND i.id = $2
 GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated_at, i.purchased_at, i.value, i.currency_code, i.life_span, i.is_favorite, i.is_archived`;
 
-      const { rows } = await this.dbPool.query(query, [id, ownerId]);
+      const rows = await this.dbPool.query(query, [ownerId, id]);
 
       const result =
         rows.length > 0
           ? {
+              ownerId: rows[0].owner_id,
               id: rows[0].id,
               name: rows[0].name,
               alias: rows[0].alias,
@@ -376,18 +428,23 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
               updatedAt: dayjs.utc(rows[0].updated_at).unix(),
               purchasedAt: dayjs.utc(rows[0].purchased_at).unix(),
               value: rows[0].value,
-              currentValue: rows[0].current_value,
-              lifePercentage: rows[0].life_percentage,
               currencyCode: rows[0].currency_code,
               lifeSpan: rows[0].life_span,
               isFavorite: rows[0].is_favorite,
               isArchived: rows[0].is_archived,
+              tags: <Array<Tag>>JSON.parse(rows[0].tags),
+              currentValue: rows[0].current_value,
+              lifeSpanLeft: rows[0].life_span_left,
+              lifePercentage: rows[0].life_percentage,
             }
           : null;
 
       return result;
     } catch (error) {
-      this.logger.error(`IM::getItem: ${error.stack}`);
+      if (error instanceof Error) {
+        this.logger.error(`IM::getItem: ${error.stack}`);
+      }
+
       throw new AppError(
         commonErrors.databaseError,
         `Could not get an item #${id}`,
@@ -396,10 +453,12 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
     }
   }
 
-  async updateItem(
-    id,
-    ownerId,
-    {
+  public async updateItem(
+    ownerId: string,
+    id: number,
+    item: Omit<Item, "ownerId" | "id" | "added_at">
+  ): Promise<Item> {
+    const {
       name,
       alias,
       description,
@@ -411,20 +470,20 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
       isFavorite,
       isArchived,
       tags,
-    }
-  ) {
-    const sets = [];
+    } = item;
+
+    const sets: Array<[string, string | number | boolean]> = [];
 
     if (!util.isNil(name)) {
       sets.push([`name = $?`, name]);
     }
 
     if (!util.isNil(alias)) {
-      sets.push([`alias = $?`, alias]);
+      sets.push([`alias = $?`, alias!]);
     }
 
     if (!util.isNil(description)) {
-      sets.push([`description = $?`, description]);
+      sets.push([`description = $?`, description!]);
     }
 
     if (!util.isNil(updatedAt)) {
@@ -463,21 +522,23 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
       (agg, [clause, value], index) => {
         parameterIndex = index + 1;
         if (index > 0) {
-          agg.clause = `${agg.clause}, ${clause.replace("?", parameterIndex)}`;
+          agg.clause = `${agg.clause}, ${clause.replace(
+            "?",
+            String(parameterIndex)
+          )}`;
         } else {
-          agg.clause = clause.replace("?", parameterIndex);
+          agg.clause = clause.replace("?", String(parameterIndex));
         }
         agg.values.push(value);
         return agg;
       },
-      { clause: "", values: [] }
+      { clause: "", values: <Array<number | string | boolean>>[] }
     );
 
     values.push(id);
     values.push(ownerId);
 
-    const result = {};
-    const client = this.dbPool.getClient();
+    const client = await this.dbPool.getClient();
     try {
       await client.query("BEGIN");
 
@@ -488,7 +549,7 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
       if (!util.isNil(tags) && tags.length > 0) {
         const selectItemToTagQuery = `SELECT id FROM lot.items_to_tags WHERE owner_id = $1 AND id = $2`;
 
-        const { rows: mappingRows } = await client.query(selectItemToTagQuery, [
+        const mappingRows = await client.query(selectItemToTagQuery, [
           ownerId,
           id,
         ]);
@@ -507,7 +568,7 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
         for (const tag of tags) {
           // Add a new tag
           if (tag.id === -1) {
-            const { rows: tagRows } = await client.query(insertTagQuery, [
+            const tagRows = await client.query(insertTagQuery, [
               ownerId,
               tag.name,
             ]);
@@ -540,39 +601,51 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
       }
 
       const selectUpdatedItemQuery = `
-SELECT i.*, json_agg(to_jsonb(t.*) - 'owner_id') AS tags FROM lot.items i 
+SELECT
+    i.*,
+    ROUND(i.value * EXTRACT(EPOCH FROM (now() - i.purchased_at)) / i.life_span)              AS current_value, -- value * (today - purchased_at) / life_span
+    ROUND((EXTRACT(EPOCH FROM (now() - i.purchased_at)) / i.life_span * 100)::numeric, 2)    AS life_percentage, -- (today - purchased_at) / life_span * 100
+    json_agg(to_jsonb(t.*) - 'owner_id') AS tags
+FROM lot.items i
 LEFT OUTER JOIN lot.items_to_tags itt ON itt.owner_id = i.owner_id AND itt.item_id = i.id
 LEFT OUTER JOIN lot.tags t ON t.owner_id = itt.owner_id AND t.id = itt.tag_id
-WHERE i.owner_id = $1 AND i.id = $2
+WHERE i.onwer_id = $1 AND i.id = $2
 GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated_at, i.purchased_at, i.value, i.currency_code, i.life_span, i.is_favorite, i.is_archived`;
 
-      const { rows: itemRows } = await client.query(selectUpdatedItemQuery, [
+      const itemRows = await client.query(selectUpdatedItemQuery, [
         ownerId,
         id,
       ]);
 
-      if (itemRows.length > 0) {
-        result.id = itemRows[0].id;
-        result.name = itemRows[0].name;
-        result.alias = itemRows[0].alias;
-        result.description = itemRows[0].description;
-        result.addedAt = dayjs.utc(itemRows[0].added_at).unix();
-        result.updatedAt = dayjs.utc(itemRows[0].updated_at).unix();
-        result.purchasedAt = dayjs.utc(itemRows[0].purchased_at).unix();
-        result.value = itemRows[0].value;
-        result.currencyCode = itemRows[0].currency_code;
-        result.lifeSpan = itemRows[0].life_span;
-        result.isFavorite = itemRows[0].is_favorite;
-        result.isArchived = itemRows[0].is_archived;
-        result.tags = itemRows[0].tags;
-      }
       await client.query("COMMIT");
+
+      const result = {
+        ownerId: itemRows[0].owner_id,
+        id: itemRows[0].id,
+        name: itemRows[0].name,
+        alias: itemRows[0].alias,
+        description: itemRows[0].description,
+        addedAt: dayjs.utc(itemRows[0].added_at).unix(),
+        updatedAt: dayjs.utc(itemRows[0].updated_at).unix(),
+        purchasedAt: dayjs.utc(itemRows[0].purchased_at).unix(),
+        value: itemRows[0].value,
+        currencyCode: itemRows[0].currency_code,
+        lifeSpan: itemRows[0].life_span,
+        isFavorite: itemRows[0].is_favorite,
+        isArchived: itemRows[0].is_archived,
+        tags: <Array<Tag>>JSON.parse(itemRows[0].tags),
+        currentValue: itemRows[0].current_value,
+        lifeSpanLeft: itemRows[0].life_span_left,
+        lifePercentage: itemRows[0].life_percentage,
+      };
 
       return result;
     } catch (error) {
       await client.query("ROLLBACK");
 
-      this.logger.error(`IM::updateItem: ${error.stack}`);
+      if (error instanceof Error) {
+        this.logger.error(`IM::updateItem: ${error.stack}`);
+      }
 
       throw new AppError(
         commonErrors.databaseError,
@@ -584,14 +657,14 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
     }
   }
 
-  async deleteItem(id, ownerId) {
-    const client = this.dbPool.getClient();
+  public async deleteItem(ownerId: string, id: number) {
+    const client = await this.dbPool.getClient();
     try {
       await client.query("BEGIN");
 
       const deleteItemToTagQuery = `DELETE FROM lot.items_to_tags WHERE id = $1 AND owner_id = $2 RETURNING id`;
 
-      const { rows: mappingRows } = await client.query(deleteItemToTagQuery, [
+      const mappingRows = await client.query(deleteItemToTagQuery, [
         id,
         ownerId,
       ]);
@@ -606,10 +679,7 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
 
       const deleteItemQuery = `DELETE FROM lot.items WHERE id = $1 AND owner_id = $2 RETURNING id`;
 
-      const { rows: itemRows } = await client.query(deleteItemQuery, [
-        id,
-        ownerId,
-      ]);
+      const itemRows = await client.query(deleteItemQuery, [id, ownerId]);
       if (itemRows.length === 0) {
         throw new AppError(
           commonErrors.resourceNotFoundError,
@@ -622,7 +692,9 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
     } catch (error) {
       await client.query("ROLLBACK");
 
-      this.logger.error(`IM::deleteItem: ${error.stack}`);
+      if (error instanceof Error) {
+        this.logger.error(`IM::deleteItem: ${error.stack}`);
+      }
 
       throw new AppError(
         commonErrors.databaseError,
@@ -635,4 +707,4 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
   }
 }
 
-module.exports = ItemModule;
+export default ItemModule;

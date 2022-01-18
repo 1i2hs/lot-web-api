@@ -1,6 +1,7 @@
-const dotenv = require("dotenv");
-const { AppError, commonErrors } = require("../error");
+import * as dotenv from "dotenv";
+import { AppError, commonErrors } from "../error";
 
+console.log(process.env.NODE_ENV);
 // Set the NODE_ENV to 'development' by default
 process.env.NODE_ENV = process.env.NODE_ENV || "development";
 
@@ -22,7 +23,7 @@ if (envFound.error) {
 //   );
 // }
 
-module.exports = {
+export default {
   /**
    * Your application name
    */
@@ -30,15 +31,15 @@ module.exports = {
   /**
    * Your favorite port
    */
-  port: parseInt(process.env.PORT, 10) || 3000,
+  port: parseInt(process.env.PORT ?? "3000", 10),
 
   db: {
     user: process.env.POSTGRESQL_USER,
     password: process.env.POSTGRESQL_PASSWORD,
     host: process.env.POSTGRESQL_HOST,
     database: process.env.POSTGRESQL_DATABASE,
-    port: process.env.POSTGRESQL_PORT,
-    poolSize: process.env.POSTGRESQL_POOL_SIZE,
+    port: Number(process.env.POSTGRESQL_PORT),
+    poolSize: Number(process.env.POSTGRESQL_POOL_SIZE),
   },
 
   /**
@@ -51,10 +52,10 @@ module.exports = {
   },
 
   /**
-   * Used by winston logger
+   * Used by pino logger
    */
   logs: {
-    level: process.env.LOG_LEVEL || "silly",
+    level: process.env.LOG_LEVEL ?? "silly",
   },
   /**
    * API configs

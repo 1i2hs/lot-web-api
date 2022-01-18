@@ -9,6 +9,7 @@ const commonErrors = {
   objectCreationError: `Object Creation Error`,
   resourceNotFoundError: `Resource Not Found Error`,
   remoteStorageError: `Remote Storage Error`,
+  requestValidationError: `Request Validation Error`,
 };
 
-module.exports = commonErrors;
+export default commonErrors;
