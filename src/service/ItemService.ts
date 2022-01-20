@@ -60,7 +60,11 @@ class ItemService {
     return updatedItem;
   }
 
-  async deleteItem() {}
+  public async deleteItem(ownerId: string, id: number) {
+    const deletedItemId = await this.itemModule.deleteItem(ownerId, id);
+
+    return deletedItemId;
+  }
 }
 
 export default ItemService;

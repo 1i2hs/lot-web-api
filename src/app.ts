@@ -8,7 +8,6 @@ import apiPlugins from "./plugins/api";
 import { AppError, commonErrors, ErrorHandler } from "./error";
 
 async function build(option: FastifyServerOptions) {
-  // dayjs.extend(require("dayjs/plugin/utc"));
   dayjs.extend(utc);
 
   const app = fastify(option);
@@ -18,18 +17,18 @@ async function build(option: FastifyServerOptions) {
   app.setErrorHandler(async (error, request, reply) => {
     await errorHandler.handleError(error, request, reply);
 
-    if (
-      error.hasOwnProperty("validation") &&
-      error.validation !== undefined &&
-      error.validation?.length > 0
-    ) {
-      return;
-    }
+    // if (
+    //   error.hasOwnProperty("validation") &&
+    //   error.validation !== undefined &&
+    //   error.validation?.length > 0
+    // ) {
+    //   return;
+    // }
 
-    if (!errorHandler.isTrustedError(error)) {
-      await closeServer(app);
-      process.exit(1);
-    }
+    // if (!errorHandler.isTrustedError(error)) {
+    //   await closeServer(app);
+    //   process.exit(1);
+    // }
   });
 
   app.register(cors, (instance) => async (req, callback) => {

@@ -54,6 +54,14 @@ class ItemModule {
       DESC: (value: number) => [`life_span < $?`, value],
       ASC: (value: number) => [`life_span > $?`, value],
     },
+    current_value: {
+      DESC: (value: number) => [`current_value < $?`, value],
+      ASC: (value: number) => [`current_value > $?`, value],
+    },
+    life_span_left: {
+      DESC: (value: number) => [`life_span_left < $?`, value],
+      ASC: (value: number) => [`life_span_left > $?`, value],
+    },
   };
 
   constructor(dbPool: IDBPool, logger: FastifyLoggerInstance) {
@@ -128,12 +136,11 @@ class ItemModule {
         tags: [],
       };
 
-      const insertTagQuery = `INSERT INTO lot.tags(owner_id, name) VALUES ($1, $2) ON CONFLICT (owner_id, name) DO NOTHING RETURNING id`;
+      const insertTagQuery = `INSERT INTO lot.tags(owner_id, name) VALUES ($1, $2) RETURNING id`;
 
-      const insertItemToTagQuery = `INSERT INTO lot.items_to_tags(owner_id, item_id, tag_id) VALUES ($1, $2, $3) ON CONFLICT (owner_id, item_id, tag_id) DO NOTHING`;
+      const insertItemToTagQuery = `INSERT INTO lot.items_to_tags(owner_id, item_id, tag_id) VALUES ($1, $2, $3)`;
 
       for (const tag of tags) {
-        let tagId = tag.id;
         if (tag.id === -1) {
           const tagRows = await client.query(insertTagQuery, [
             ownerId,
@@ -148,9 +155,9 @@ class ItemModule {
             );
           }
 
-          tagId = tagRows[0].id;
+          tag.id = tagRows[0].id;
         }
-        await client.query(insertItemToTagQuery, [ownerId, id, tagId]);
+        await client.query(insertItemToTagQuery, [ownerId, id, tag.id]);
 
         result.tags.push(tag);
       }
@@ -188,6 +195,8 @@ class ItemModule {
       currencyCode,
       isFavorite,
       isArchived,
+      currentValueRange,
+      lifeSpanLeftRange,
     } = options;
 
     const order = {
@@ -216,21 +225,21 @@ class ItemModule {
 
     if (!util.isNil(_cursor)) {
       if (!nestedQueryRequired) {
-        const where = cursorWhereFn(_cursor);
+        const where = cursorWhereFn(_cursor!);
         wheres.push(where);
       }
     }
 
     if (!util.isNil(name)) {
-      wheres.push([`name LIKE %$?%`, name]);
+      wheres.push([`name LIKE %$?%`, name!]);
     }
 
     if (!util.isNil(alias)) {
-      wheres.push([`alias LIKE %$?%`, alias]);
+      wheres.push([`alias LIKE %$?%`, alias!]);
     }
 
     if (!util.isNil(purchasedTimeRange)) {
-      const { min, max } = purchasedTimeRange;
+      const { min, max } = purchasedTimeRange!;
       if (!util.isNil(min)) {
         wheres.push([
           `purchased_at >= $?`,
@@ -247,37 +256,59 @@ class ItemModule {
     }
 
     if (!util.isNil(valueRange)) {
-      const { min, max } = valueRange;
+      const { min, max } = valueRange!;
       if (!util.isNil(min)) {
-        wheres.push([`value >= $?`, min]);
+        wheres.push([`value >= $?`, min!]);
       }
 
       if (!util.isNil(max)) {
-        wheres.push([`value <= $?`, max]);
+        wheres.push([`value <= $?`, max!]);
       }
     }
 
     if (!util.isNil(lifeSpanRange)) {
-      const { min, max } = lifeSpanRange;
+      const { min, max } = lifeSpanRange!;
       if (!util.isNil(min)) {
-        wheres.push([`life_span >= $?`, min]);
+        wheres.push([`life_span >= $?`, min!]);
       }
 
       if (!util.isNil(max)) {
-        wheres.push([`life_span <= $?`, max]);
+        wheres.push([`life_span <= $?`, max!]);
       }
     }
 
     if (!util.isNil(currencyCode)) {
-      wheres.push([`currency_code = $?`, currencyCode]);
+      wheres.push([`currency_code = $?`, currencyCode!]);
     }
 
     if (!util.isNil(isFavorite)) {
-      wheres.push([`is_favorite = $?`, isFavorite]);
+      wheres.push([`is_favorite = $?`, isFavorite!]);
     }
 
     if (!util.isNil(isArchived)) {
-      wheres.push([`is_archived = $?`, isArchived]);
+      wheres.push([`is_archived = $?`, isArchived!]);
+    }
+
+    if (!util.isNil(currentValueRange)) {
+      const { min, max } = currentValueRange!;
+      if (!util.isNil(min)) {
+        wheres.push([`current_value >= $?`, min!]);
+      }
+
+      if (!util.isNil(max)) {
+        wheres.push([`current_value <= $?`, max!]);
+      }
+    }
+
+    if (!util.isNil(lifeSpanLeftRange)) {
+      const { min, max } = lifeSpanLeftRange!;
+      if (!util.isNil(min)) {
+        wheres.push([`life_span_left >= $?`, min!]);
+      }
+
+      if (!util.isNil(max)) {
+        wheres.push([`life_span_left <= $?`, max!]);
+      }
     }
 
     let parameterIndex = 0;
@@ -285,12 +316,12 @@ class ItemModule {
       (agg, [clause, value], index) => {
         parameterIndex = index + 1;
         if (index > 0) {
-          agg.clause = `${agg.clause} AND ${clause.replace(
+          agg.clause = `${agg.clause} AND i.${clause.replace(
             "?",
             String(parameterIndex)
           )}`;
         } else {
-          agg.clause = clause.replace("?", String(parameterIndex));
+          agg.clause = `i.${clause.replace("?", String(parameterIndex))}`;
         }
         agg.values.push(value);
         return agg;
@@ -299,7 +330,7 @@ class ItemModule {
     );
 
     if (nestedQueryRequired) {
-      values.push(_cursor);
+      values.push(_cursor!);
     }
 
     try {
@@ -373,7 +404,7 @@ LIMIT 100`;
                 lifeSpan: row.life_span,
                 isFavorite: row.is_favorite,
                 isArchived: row.is_archived,
-                tags: <Array<Tag>>JSON.parse(row.tags),
+                tags: <Array<Tag>>(row.tags[0] === null ? [] : row.tags),
                 currentValue: row.current_value,
                 lifeSpanLeft: row.life_span_left,
                 lifePercentage: row.life_percentage,
@@ -432,7 +463,7 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
               lifeSpan: rows[0].life_span,
               isFavorite: rows[0].is_favorite,
               isArchived: rows[0].is_archived,
-              tags: <Array<Tag>>JSON.parse(rows[0].tags),
+              tags: <Array<Tag>>(rows[0].tags[0] === null ? [] : rows[0].tags),
               currentValue: rows[0].current_value,
               lifeSpanLeft: rows[0].life_span_left,
               lifePercentage: rows[0].life_percentage,
@@ -516,6 +547,8 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
     if (!util.isNil(isArchived)) {
       sets.push([`is_archived = $?`, isArchived]);
     }
+
+    sets.push([`updated_at = $?`, dayjs.utc().format("YYYY-MM-DD HH:mm:ssZZ")]);
 
     let parameterIndex = 0;
     const { clause, values } = sets.reduce(
@@ -609,7 +642,7 @@ SELECT
 FROM lot.items i
 LEFT OUTER JOIN lot.items_to_tags itt ON itt.owner_id = i.owner_id AND itt.item_id = i.id
 LEFT OUTER JOIN lot.tags t ON t.owner_id = itt.owner_id AND t.id = itt.tag_id
-WHERE i.onwer_id = $1 AND i.id = $2
+WHERE i.owner_id = $1 AND i.id = $2
 GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated_at, i.purchased_at, i.value, i.currency_code, i.life_span, i.is_favorite, i.is_archived`;
 
       const itemRows = await client.query(selectUpdatedItemQuery, [
@@ -633,7 +666,9 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
         lifeSpan: itemRows[0].life_span,
         isFavorite: itemRows[0].is_favorite,
         isArchived: itemRows[0].is_archived,
-        tags: <Array<Tag>>JSON.parse(itemRows[0].tags),
+        tags: <Array<Tag>>(
+          (itemRows[0].tags[0] === null ? [] : itemRows[0].tags)
+        ),
         currentValue: itemRows[0].current_value,
         lifeSpanLeft: itemRows[0].life_span_left,
         lifePercentage: itemRows[0].life_percentage,
@@ -657,29 +692,21 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
     }
   }
 
-  public async deleteItem(ownerId: string, id: number) {
+  public async deleteItem(ownerId: string, id: number): Promise<number> {
     const client = await this.dbPool.getClient();
     try {
       await client.query("BEGIN");
 
-      const deleteItemToTagQuery = `DELETE FROM lot.items_to_tags WHERE id = $1 AND owner_id = $2 RETURNING id`;
+      const deleteItemToTagQuery = `DELETE FROM lot.items_to_tags WHERE owner_id = $1 AND item_id = $2`;
 
       const mappingRows = await client.query(deleteItemToTagQuery, [
-        id,
         ownerId,
+        id,
       ]);
-      if (mappingRows.length === 0) {
-        throw new AppError(
-          commonErrors.resourceNotFoundError,
-          `There is no mapping with id ${id}`,
-          true,
-          400
-        );
-      }
 
-      const deleteItemQuery = `DELETE FROM lot.items WHERE id = $1 AND owner_id = $2 RETURNING id`;
+      const deleteItemQuery = `DELETE FROM lot.items WHERE owner_id = $1 AND id = $2 RETURNING id`;
 
-      const itemRows = await client.query(deleteItemQuery, [id, ownerId]);
+      const itemRows = await client.query(deleteItemQuery, [ownerId, id]);
       if (itemRows.length === 0) {
         throw new AppError(
           commonErrors.resourceNotFoundError,
@@ -689,6 +716,8 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
         );
       }
       await client.query("COMMIT");
+
+      return id;
     } catch (error) {
       await client.query("ROLLBACK");
 
@@ -698,7 +727,7 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
 
       throw new AppError(
         commonErrors.databaseError,
-        `Could not update an item #'${id}'`,
+        `Could not delete an item #'${id}'`,
         true
       );
     } finally {

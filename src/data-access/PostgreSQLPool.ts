@@ -8,9 +8,14 @@ class PostgreSQLPool implements DBPool {
     this.pool = pgPool;
   }
 
-  public async query(text: string, params: Array<string | number>) {
+  public async query(text: string, params?: Array<string | number>) {
     const { rows } = await this.pool.query(text, params);
     return rows;
+  }
+
+  public async isConnected(): Promise<boolean> {
+    const { rows } = await this.pool.query("SELECT 'hello, world'");
+    return rows.length > 0;
   }
 
   public async getClient() {
