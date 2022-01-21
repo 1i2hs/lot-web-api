@@ -12,6 +12,7 @@
   "author": "Inho Han",
   "license": "ISC",
   "dependencies": {
+    "@gquittet/graceful-server": "^2.5.2",
     "dayjs": "^1.10.7",
     "dotenv": "^10.0.0",
     "fastify": "^3.25.3",

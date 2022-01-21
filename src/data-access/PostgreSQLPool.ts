@@ -1,11 +1,18 @@
-import { Pool } from "pg";
+import { FastifyLoggerInstance } from "fastify";
+import { Pool, PoolClient } from "pg";
 import DBPool from "./DBPool.interface";
 
 class PostgreSQLPool implements DBPool {
   private readonly pool: Pool;
+  private readonly logger: FastifyLoggerInstance;
 
-  constructor(pgPool: Pool) {
+  constructor(pgPool: Pool, logger: FastifyLoggerInstance) {
     this.pool = pgPool;
+    this.logger = logger;
+
+    this.pool.on("error", (error: Error, client: PoolClient) => {
+      this.logger.error(error);
+    });
   }
 
   public async query(text: string, params?: Array<string | number>) {
@@ -14,7 +21,12 @@ class PostgreSQLPool implements DBPool {
   }
 
   public async isConnected(): Promise<boolean> {
-    const { rows } = await this.pool.query("SELECT 'hello, world'");
+    const { rows } = await this.pool
+      .query("SELECT 'hello, world'")
+      .catch((error) => {
+        this.logger.error(error);
+        return { rows: [] };
+      });
     return rows.length > 0;
   }
 

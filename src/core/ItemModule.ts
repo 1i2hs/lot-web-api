@@ -5,7 +5,7 @@ import { IDBPool } from "../data-access";
 import { Item, PaginationCursor, Tag } from "../model";
 import { AppError, commonErrors } from "../error";
 import * as util from "../misc/util";
-import { ItemFilterOption } from "../types";
+import { ItemFilterOption, ItemCursorBase } from "../types";
 import PaginatedData from "../model/PaginatedData";
 
 class ItemModule {
@@ -388,8 +388,11 @@ LIMIT 100`;
       const result =
         rows.length > 0
           ? {
-              total,
-              cursor: rows[rows.length - 1][order.base],
+              total: Number(total),
+              cursor: this.parseCursor(
+                order.base,
+                rows[rows.length - 1][order.base]
+              ),
               data: rows.map((row) => ({
                 ownerId: row.owner_id,
                 id: row.id,
@@ -411,7 +414,7 @@ LIMIT 100`;
               })),
             }
           : {
-              total,
+              total: Number(total),
               cursor: null,
               data: [],
             };
@@ -732,6 +735,19 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
       );
     } finally {
       client.release();
+    }
+  }
+
+  private parseCursor(
+    base: ItemCursorBase,
+    value: number | string
+  ): number | string {
+    switch (base) {
+      case "added_at":
+      case "purchased_at":
+        return dayjs.utc(value).unix();
+      default:
+        return value;
     }
   }
 }

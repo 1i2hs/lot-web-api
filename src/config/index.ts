@@ -1,9 +1,9 @@
 import * as dotenv from "dotenv";
 import { AppError, commonErrors } from "../error";
 
-console.log(process.env.NODE_ENV);
 // Set the NODE_ENV to 'development' by default
 process.env.NODE_ENV = process.env.NODE_ENV || "development";
+console.log(`Initiating the application with env: ${process.env.NODE_ENV}`);
 
 const envFound = dotenv.config();
 if (envFound.error) {

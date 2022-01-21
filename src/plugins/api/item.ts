@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyPluginOptions, FastifyRequest } from "fastify";
 import { ItemService } from "../../service";
 import { Tag } from "../../model";
+import { ItemCursorBase } from "../../types";
 
 declare module "fastify" {
   export interface FastifyInstance {
@@ -267,15 +268,7 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
       request: FastifyRequest<{
         Querystring: {
           cursor: number | string;
-          base:
-            | "added_at"
-            | "name"
-            | "alias"
-            | "purchased_at"
-            | "value"
-            | "life_span"
-            | "current_value"
-            | "life_span_left";
+          base: ItemCursorBase;
           order: "ASC" | "DESC";
           name: string;
           alias: string;
@@ -502,24 +495,6 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
       };
     }
   );
-
-  // const animalBodyJsonSchema = {
-  //   type: "object",
-  //   required: ["animal"],
-  //   properties: {
-  //     animal: { type: "string" },
-  //   },
-  // };
-
-  // const schema = {
-  //   body: animalBodyJsonSchema,
-  // };
-
-  // fastify.post("/animals", { schema }, async (request, reply) => {
-  //   // we can use the `request.body` object to get the data sent by the client
-  //   const result = await collection.insertOne({ animal: request.body.animal });
-  //   return result;
-  // });
 }
 
 export default plugin;

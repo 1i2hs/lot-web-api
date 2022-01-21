@@ -18,7 +18,7 @@ async function plugin(fastify: FastifyInstance, option: FastifyPluginOptions) {
   });
 
   // data-access
-  const sqlPool = new PostgreSQLPool(pgPool);
+  const sqlPool = new PostgreSQLPool(pgPool, fastify.log);
 
   if (!(await sqlPool.isConnected())) {
     throw new AppError(

@@ -1,8 +1,6 @@
-import { PaginationCursor } from ".";
-
 interface PaginatedData<T> {
   total: number;
-  cursor: PaginationCursor;
+  cursor: number | string | null;
   data: Array<T>;
 }
 

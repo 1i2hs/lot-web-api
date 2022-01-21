@@ -1,5 +1,7 @@
+import { ItemCursorBase } from "../types";
+
 interface PaginationCursor {
-  base: string;
+  base: ItemCursorBase;
   order: string;
   value: string | number;
 }

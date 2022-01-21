@@ -13,3 +13,13 @@ export type ItemFilterOption = {
   currentValueRange?: { min?: number; max?: number };
   lifeSpanLeftRange?: { min?: number; max?: number };
 };
+
+export type ItemCursorBase =
+  | "added_at"
+  | "name"
+  | "alias"
+  | "purchased_at"
+  | "value"
+  | "life_span"
+  | "current_value"
+  | "life_span_left";
