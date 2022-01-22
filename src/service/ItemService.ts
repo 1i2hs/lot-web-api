@@ -23,7 +23,7 @@ class ItemService {
     lifeSpan: number,
     tags: Array<Tag>
   ) {
-    const result = await this.itemModule.createItem(
+    const newItem = await this.itemModule.createItem(
       ownerId,
       name,
       alias,
@@ -35,7 +35,7 @@ class ItemService {
       tags
     );
 
-    return result;
+    return newItem;
   }
 
   public async getItems(ownerId: string, options: ItemFilterOption) {

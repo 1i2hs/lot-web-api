@@ -702,10 +702,7 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
 
       const deleteItemToTagQuery = `DELETE FROM lot.items_to_tags WHERE owner_id = $1 AND item_id = $2`;
 
-      const mappingRows = await client.query(deleteItemToTagQuery, [
-        ownerId,
-        id,
-      ]);
+      await client.query(deleteItemToTagQuery, [ownerId, id]);
 
       const deleteItemQuery = `DELETE FROM lot.items WHERE owner_id = $1 AND id = $2 RETURNING id`;
 

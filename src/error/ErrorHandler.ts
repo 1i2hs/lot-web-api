@@ -8,13 +8,16 @@ class ErrorHandler {
     this.logger = logger;
   }
   public async handleError(
-    error: Error,
+    error: Error | AppError,
     request?: FastifyRequest,
     reply?: FastifyReply
   ): Promise<void> {
     this.logger.error(`ErrorHandler: ${error.stack}`);
 
     if (!util.isNil(request) && !util.isNil(reply)) {
+      if (error instanceof AppError) {
+        reply!.code(error.httpCode);
+      }
       if (reply!.statusCode < 500) {
         reply!.log.info({ res: reply, err: error }, error && error.message);
       } else {
