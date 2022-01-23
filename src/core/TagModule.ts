@@ -58,9 +58,28 @@ class TagModule {
 
   public async getTags(ownerId: string, phrase?: string): Promise<Array<Tag>> {
     try {
+      const wheres = [[`owner_id = $1`, ownerId]];
+
+      if (phrase !== undefined && phrase.length > 0) {
+        wheres.push([`name LIKE $2`, `%${phrase}%`]);
+      }
+
+      const { clause, values } = wheres.reduce(
+        (agg, [clause, value], index) => {
+          if (index > 0) {
+            agg.clause = `${agg.clause} AND ${clause}`;
+          } else {
+            agg.clause = clause;
+          }
+          agg.values.push(value);
+          return agg;
+        },
+        { clause: "", values: <Array<number | string | boolean>>[] }
+      );
+
       const tagRows = await this.dbPool.query(
-        `SELECT * FROM lot.tags WHERE owner_id = $1 AND name LIKE %$2%`,
-        [ownerId, phrase]
+        `SELECT * FROM lot.tags WHERE ${clause}`,
+        values
       );
 
       return tagRows.length > 0 ? <Array<Tag>>tagRows : [];
@@ -77,14 +96,23 @@ class TagModule {
     }
   }
 
-  public async getTag(ownerId: string, id: number): Promise<Tag | null> {
+  public async getTag(ownerId: string, id: number): Promise<Tag> {
     try {
       const tagRows = await this.dbPool.query(
         `SELECT * FROM lot.tags WHERE owner_id = $1 AND id = $2`,
         [ownerId, id]
       );
 
-      return tagRows.length > 0 ? <Tag>tagRows[0] : null;
+      if (tagRows.length === 0) {
+        throw new AppError(
+          commonErrors.resourceNotFoundError,
+          `There is no tag with id ${id}`,
+          true,
+          400
+        );
+      }
+
+      return <Tag>tagRows[0];
     } catch (error) {
       if (error instanceof Error) {
         this.logger.error(`TM::getTag: ${error.stack}`);
@@ -102,17 +130,30 @@ class TagModule {
     ownerId: string,
     id: number,
     name: string
-  ): Promise<Tag | null> {
+  ): Promise<Tag> {
     try {
       const tagRows = await this.dbPool.query(
         `UPDATE lot.tags SET name = $1 WHERE owner_id = $2 AND id = $3 RETURNING *`,
         [name, ownerId, id]
       );
 
-      return tagRows.length > 0 ? <Tag>tagRows[0] : null;
+      if (tagRows.length === 0) {
+        throw new AppError(
+          commonErrors.resourceNotFoundError,
+          `There is no tag with id ${id}`,
+          true,
+          400
+        );
+      }
+
+      return <Tag>tagRows[0];
     } catch (error) {
       if (error instanceof Error) {
         this.logger.error(`TM::updateTag: ${error.stack}`);
+      }
+
+      if (error instanceof AppError) {
+        throw error;
       }
 
       throw new AppError(
@@ -136,7 +177,7 @@ class TagModule {
       if (tagRows.length === 0) {
         throw new AppError(
           commonErrors.resourceNotFoundError,
-          `There is no item with id ${id}`,
+          `There is no tag with id ${id}`,
           true,
           400
         );

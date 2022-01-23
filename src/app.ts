@@ -1,11 +1,15 @@
 import fastify, { FastifyInstance, FastifyServerOptions } from "fastify";
 import cors from "fastify-cors";
+import helmet from "fastify-helmet";
+import cookie from "fastify-cookie";
+import csrf from "fastify-csrf";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import loaderPlugin from "./plugins/loader";
 import apiPlugins from "./plugins/api";
+import config from "./config";
 
-import { AppError, commonErrors, ErrorHandler } from "./error";
+import { ErrorHandler } from "./error";
 
 async function build(option: FastifyServerOptions) {
   dayjs.extend(utc);
@@ -33,8 +37,15 @@ async function build(option: FastifyServerOptions) {
 
   app.register(cors, (instance) => async (req, callback) => {
     const corsOptions = {
-      credentials: true,
-      allowedHeaders: ["Origin, X-Requested-With, Content-Type, Accept"],
+      methods: ["GET", "PUT", "POST", "DELETE"],
+      credentials: true, // to provide Cookies or other credentials to the client with different origin
+      allowedHeaders: [
+        "Origin",
+        "X-Requested-With",
+        "Content-Type",
+        "Accept",
+        "x-csrf-token",
+      ],
       origin: false,
     };
     // do not include CORS headers for requests from localhost
@@ -45,6 +56,13 @@ async function build(option: FastifyServerOptions) {
       corsOptions.origin = false;
     }
     callback(null, corsOptions); // callback expects two parameters: error and options
+  });
+
+  app.register(helmet);
+
+  app.register(cookie, { secret: config.cookieSecret }); // See following section to ensure security
+  app.register(csrf, {
+    cookieOpts: { signed: true },
   });
 
   await app.register(loaderPlugin);

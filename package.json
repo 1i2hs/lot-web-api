@@ -20,7 +20,10 @@
     "dayjs": "^1.10.7",
     "dotenv": "^10.0.0",
     "fastify": "^3.25.3",
+    "fastify-cookie": "^5.5.0",
     "fastify-cors": "^6.0.2",
+    "fastify-csrf": "^3.1.0",
+    "fastify-helmet": "^7.0.1",
     "fastify-plugin": "^3.0.0",
     "pg": "^8.7.1"
   },

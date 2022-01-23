@@ -11,14 +11,20 @@ async function plugin(fastify: FastifyInstance, option: FastifyPluginOptions) {
     done();
   });
 
-  fastify.get("/authz/tokens", async (request, reply) => {
-    return {};
+  fastify.get("/auth/csrf", async (request, reply) => {
+    const token = await reply.generateCsrf();
+    return {
+      token,
+    };
   });
 
-  fastify.get("/authz/access-token", async (request, reply) => {
-    return {
-      token: "some-token",
-    };
+  /**
+   * default: issues an access token and refresh token
+   * grantType: "refresh_token" => issues a new access token
+   *   if the regeneration of access token fails, force client page to sign out and re-sign in
+   */
+  fastify.post("/auth/token", async (request, reply) => {
+    return { token: "some-token" };
   });
 }
 

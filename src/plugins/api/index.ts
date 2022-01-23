@@ -7,6 +7,7 @@ async function apiPlugin(
   fastify: FastifyInstance,
   option: FastifyPluginOptions
 ) {
+
   await fastify.register(authzPlugin);
 
   await fastify.register(itemPlugin);

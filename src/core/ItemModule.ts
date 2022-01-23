@@ -2,7 +2,7 @@ import { FastifyLoggerInstance } from "fastify";
 import dayjs from "dayjs";
 import "dayjs/plugin/utc.js";
 import { IDBPool } from "../data-access";
-import { Item, PaginationCursor, Tag } from "../model";
+import { Item, Tag } from "../model";
 import { AppError, commonErrors } from "../error";
 import * as util from "../misc/util";
 import { ItemFilterOption, ItemCursorBase } from "../types";
@@ -231,11 +231,11 @@ class ItemModule {
     }
 
     if (!util.isNil(name)) {
-      wheres.push([`name LIKE %$?%`, name!]);
+      wheres.push([`name LIKE $?`, `%${name!}%`]);
     }
 
     if (!util.isNil(alias)) {
-      wheres.push([`alias LIKE %$?%`, alias!]);
+      wheres.push([`alias LIKE $?`, `%${alias!}%`]);
     }
 
     if (!util.isNil(purchasedTimeRange)) {
@@ -433,7 +433,7 @@ LIMIT 100`;
     }
   }
 
-  public async getItem(ownerId: string, id: number): Promise<Item | null> {
+  public async getItem(ownerId: string, id: number): Promise<Item> {
     try {
       const query = `
 SELECT
@@ -450,33 +450,43 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
 
       const rows = await this.dbPool.query(query, [ownerId, id]);
 
-      const result =
-        rows.length > 0
-          ? {
-              ownerId: rows[0].owner_id,
-              id: rows[0].id,
-              name: rows[0].name,
-              alias: rows[0].alias,
-              description: rows[0].description,
-              addedAt: dayjs.utc(rows[0].added_at).unix(),
-              updatedAt: dayjs.utc(rows[0].updated_at).unix(),
-              purchasedAt: dayjs.utc(rows[0].purchased_at).unix(),
-              value: rows[0].value,
-              currencyCode: rows[0].currency_code,
-              lifeSpan: rows[0].life_span,
-              isFavorite: rows[0].is_favorite,
-              isArchived: rows[0].is_archived,
-              tags: <Array<Tag>>(rows[0].tags[0] === null ? [] : rows[0].tags),
-              currentValue: rows[0].current_value,
-              lifeSpanLeft: rows[0].life_span_left,
-              lifePercentage: rows[0].life_percentage,
-            }
-          : null;
+      if (rows.length === 0) {
+        throw new AppError(
+          commonErrors.resourceNotFoundError,
+          `There is no item with id ${id}`,
+          true,
+          400
+        );
+      }
+
+      const result = {
+        ownerId: rows[0].owner_id,
+        id: rows[0].id,
+        name: rows[0].name,
+        alias: rows[0].alias,
+        description: rows[0].description,
+        addedAt: dayjs.utc(rows[0].added_at).unix(),
+        updatedAt: dayjs.utc(rows[0].updated_at).unix(),
+        purchasedAt: dayjs.utc(rows[0].purchased_at).unix(),
+        value: rows[0].value,
+        currencyCode: rows[0].currency_code,
+        lifeSpan: rows[0].life_span,
+        isFavorite: rows[0].is_favorite,
+        isArchived: rows[0].is_archived,
+        tags: <Array<Tag>>(rows[0].tags[0] === null ? [] : rows[0].tags),
+        currentValue: rows[0].current_value,
+        lifeSpanLeft: rows[0].life_span_left,
+        lifePercentage: rows[0].life_percentage,
+      };
 
       return result;
     } catch (error) {
       if (error instanceof Error) {
         this.logger.error(`IM::getItem: ${error.stack}`);
+      }
+
+      if (error instanceof AppError) {
+        throw error;
       }
 
       throw new AppError(
@@ -580,7 +590,16 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
 
       const updateItemQuery = `UPDATE lot.items SET ${clause} WHERE id = $${++parameterIndex} AND owner_id = $${++parameterIndex} RETURNING *`;
 
-      await client.query(updateItemQuery, values);
+      const updatedItemRows = await client.query(updateItemQuery, values);
+
+      if (updatedItemRows.length === 0) {
+        throw new AppError(
+          commonErrors.resourceNotFoundError,
+          `There is no item with id ${id}`,
+          true,
+          400
+        );
+      }
 
       if (!util.isNil(tags) && tags.length > 0) {
         const selectItemToTagQuery = `SELECT id FROM lot.items_to_tags WHERE owner_id = $1 AND id = $2`;
@@ -685,6 +704,10 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
         this.logger.error(`IM::updateItem: ${error.stack}`);
       }
 
+      if (error instanceof AppError) {
+        throw error;
+      }
+
       throw new AppError(
         commonErrors.databaseError,
         `Could not update an item #'${id}'`,
@@ -723,6 +746,10 @@ GROUP BY i.id, i.owner_id, i.name, i.alias, i.description, i.added_at, i.updated
 
       if (error instanceof Error) {
         this.logger.error(`IM::deleteItem: ${error.stack}`);
+      }
+
+      if (error instanceof AppError) {
+        throw error;
       }
 
       throw new AppError(

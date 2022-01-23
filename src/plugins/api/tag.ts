@@ -22,17 +22,14 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
     },
   };
 
-  fastify.post(
+  fastify.post<{
+    Body: {
+      name: string;
+    };
+  }>(
     "/tags",
-    { schema: newTagJsonSchema },
-    async (
-      request: FastifyRequest<{
-        Body: {
-          name: string;
-        };
-      }>,
-      reply
-    ) => {
+    { schema: newTagJsonSchema, onRequest: fastify.csrfProtection },
+    async (request, reply) => {
       const userId = request.auth.userId;
       const { name } = request.body;
 
@@ -61,10 +58,10 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
     },
   };
 
-  fastify.get(
+  fastify.get<{ Params: { id: number } }>(
     "/tags/:id",
     { schema: singleTagJsonSchema },
-    async (request: FastifyRequest<{ Params: { id: number } }>, reply) => {
+    async (request, reply) => {
       const userId = request.auth.userId;
       const { id } = request.params;
 
@@ -95,25 +92,18 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
     },
   };
 
-  fastify.get(
-    "/tags",
-    { schema: multipleTagJsonSchema },
-    async (
-      request: FastifyRequest<{
-        Querystring: {
-          phrase: string;
-        };
-      }>,
-      reply
-    ) => {
-      const userId = request.auth.userId;
-      const { phrase } = request.query;
+  fastify.get<{
+    Querystring: {
+      phrase: string;
+    };
+  }>("/tags", { schema: multipleTagJsonSchema }, async (request, reply) => {
+    const userId = request.auth.userId;
+    const { phrase } = request.query;
 
-      const tags = await tagService.getTags(userId, phrase);
+    const tags = await tagService.getTags(userId, phrase);
 
-      return tags;
-    }
-  );
+    return tags;
+  });
 
   const singleTagUpdateJsonSchema = {
     params: {
@@ -140,18 +130,15 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
     },
   };
 
-  fastify.put(
+  fastify.put<{
+    Params: { id: number };
+    Body: {
+      name: string;
+    };
+  }>(
     "/tags/:id",
-    { schema: singleTagUpdateJsonSchema },
-    async (
-      request: FastifyRequest<{
-        Params: { id: number };
-        Body: {
-          name: string;
-        };
-      }>,
-      reply
-    ) => {
+    { schema: singleTagUpdateJsonSchema, onRequest: fastify.csrfProtection },
+    async (request, reply) => {
       const userId = request.auth.userId;
       const { id } = request.params;
       const { name } = request.body;
@@ -180,10 +167,10 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
     },
   };
 
-  fastify.delete(
+  fastify.delete<{ Params: { id: number } }>(
     "/tags/:id",
-    { schema: singleTagDeleteJsonSchema },
-    async (request: FastifyRequest<{ Params: { id: number } }>, reply) => {
+    { schema: singleTagDeleteJsonSchema, onRequest: fastify.csrfProtection },
+    async (request, reply) => {
       const { id } = request.params;
       const userId = request.auth.userId;
 

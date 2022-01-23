@@ -63,4 +63,6 @@ export default {
   api: {
     prefix: "/api",
   },
+
+  cookieSecret: process.env.COOKIE_SECRET,
 };
