@@ -1,20 +1,6 @@
 import { FastifyInstance, FastifyPluginOptions, FastifyRequest } from "fastify";
-import { ItemService } from "../../service";
 import { Tag } from "../../model";
 import { ItemCursorBase } from "../../types";
-
-declare module "fastify" {
-  export interface FastifyInstance {
-    service: {
-      item: ItemService;
-    };
-  }
-  export interface FastifyRequest {
-    auth: {
-      userId: string;
-    };
-  }
-}
 
 async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
   const itemService = fastify.service.item;

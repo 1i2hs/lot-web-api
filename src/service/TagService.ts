@@ -35,7 +35,7 @@ class TagService {
     return updatedTag;
   }
 
-  public async deleteItem(ownerId: string, id: number) {
+  public async deleteTag(ownerId: string, id: number) {
     const deletedTagId = await this.tagModule.deleteTag(ownerId, id);
 
     return deletedTagId;

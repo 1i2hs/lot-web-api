@@ -3,9 +3,23 @@ import * as pg from "pg";
 import fp from "fastify-plugin";
 import config from "../config";
 import { PostgreSQLPool } from "../data-access";
-import { ItemModule } from "../core";
-import { ItemService } from "../service";
+import { ItemModule, TagModule } from "../core";
+import { ItemService, TagService } from "../service";
 import { AppError, commonErrors } from "../error";
+
+declare module "fastify" {
+  export interface FastifyInstance {
+    service: {
+      item: ItemService;
+      tag: TagService;
+    };
+  }
+  export interface FastifyRequest {
+    auth: {
+      userId: string;
+    };
+  }
+}
 
 async function plugin(fastify: FastifyInstance, option: FastifyPluginOptions) {
   const pgPool = new pg.Pool({
@@ -37,16 +51,15 @@ async function plugin(fastify: FastifyInstance, option: FastifyPluginOptions) {
 
   // module
   const itemModule = new ItemModule(sqlPool, fastify.log);
-
-  fastify.decorate("module", {
-    item: itemModule,
-  });
+  const tagModule = new TagModule(sqlPool, fastify.log);
 
   // service
   const itemService = new ItemService(itemModule, fastify.log);
+  const tagService = new TagService(tagModule, fastify.log);
 
   fastify.decorate("service", {
     item: itemService,
+    tag: tagService,
   });
 }
 
