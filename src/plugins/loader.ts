@@ -6,18 +6,23 @@ import { PostgreSQLPool } from "../data-access";
 import { ItemModule, TagModule } from "../core";
 import { ItemService, TagService } from "../service";
 import { AppError, commonErrors } from "../error";
+import AuthorizationService from "../service/AuthorizationService";
 
 declare module "fastify" {
   export interface FastifyInstance {
     service: {
+      authz: AuthorizationService;
       item: ItemService;
       tag: TagService;
     };
+    authUser: (
+      request: FastifyRequest,
+      reply: FastifyReply,
+      done: () => void
+    ) => void;
   }
   export interface FastifyRequest {
-    auth: {
-      userId: string;
-    };
+    userId: string;
   }
 }
 
@@ -54,10 +59,12 @@ async function plugin(fastify: FastifyInstance, option: FastifyPluginOptions) {
   const tagModule = new TagModule(sqlPool, fastify.log);
 
   // service
+  const authorizationService = new AuthorizationService(fastify.log);
   const itemService = new ItemService(itemModule, fastify.log);
   const tagService = new TagService(tagModule, fastify.log);
 
   fastify.decorate("service", {
+    authz: authorizationService,
     item: itemService,
     tag: tagService,
   });

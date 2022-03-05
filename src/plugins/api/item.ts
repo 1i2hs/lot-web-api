@@ -75,7 +75,7 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
     "/items",
     { schema: newItemJsonSchema, onRequest: fastify.csrfProtection },
     async (request, reply) => {
-      const userId = request.auth.userId;
+      const userId = request.userId;
       const {
         name,
         alias,
@@ -149,7 +149,7 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
     "/items/:id",
     { schema: singleItemJsonSchema },
     async (request, reply) => {
-      const userId = request.auth.userId;
+      const userId = request.userId;
       const { id } = request.params;
 
       const item = await itemService.getItem(userId, id);
@@ -266,7 +266,7 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
       lifeSpanLeftMax: number;
     };
   }>("/items", { schema: multipleItemJsonSchema }, async (request, reply) => {
-    const userId = request.auth.userId;
+    const userId = request.userId;
     const {
       cursor,
       base,
@@ -405,7 +405,7 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
     { schema: singleItemUpdateJsonSchema, onRequest: fastify.csrfProtection },
     async (request, reply) => {
       const { id } = request.params;
-      const userId = request.auth.userId;
+      const userId = request.userId;
       const {
         name,
         alias,
@@ -459,7 +459,7 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
     { schema: singleItemDeleteJsonSchema, onRequest: fastify.csrfProtection },
     async (request, reply) => {
       const { id } = request.params;
-      const userId = request.auth.userId;
+      const userId = request.userId;
 
       const deletedItemId = await itemService.deleteItem(userId, id);
 

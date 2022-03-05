@@ -5,6 +5,7 @@ import cookie from "fastify-cookie";
 import csrf from "fastify-csrf";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
+
 import loaderPlugin from "./plugins/loader";
 import apiPlugins from "./plugins/api";
 import config from "./config";
@@ -60,7 +61,7 @@ async function build(option: FastifyServerOptions) {
 
   app.register(helmet);
 
-  app.register(cookie, { secret: config.cookieSecret }); // See following section to ensure security
+  app.register(cookie, { secret: config.cookieSecret });
   app.register(csrf, {
     cookieOpts: { signed: true },
   });

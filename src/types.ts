@@ -23,3 +23,7 @@ export type ItemCursorBase =
   | "life_span"
   | "current_value"
   | "life_span_left";
+
+export type AuthToken = {
+  uid: string;
+};

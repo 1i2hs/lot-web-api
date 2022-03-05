@@ -1,31 +1,125 @@
-import { FastifyInstance, FastifyPluginOptions } from "fastify";
+import {
+  FastifyInstance,
+  FastifyPluginOptions,
+  FastifyRequest,
+  FastifyReply,
+} from "fastify";
 import fp from "fastify-plugin";
+import * as firebaseAdmin from "firebase-admin";
+import { applicationDefault } from "firebase-admin/app";
+import * as firebaseAdminAuth from "firebase-admin/auth";
+import { AppError, commonErrors } from "../../error";
+import config from "../../config";
 
 async function plugin(fastify: FastifyInstance, option: FastifyPluginOptions) {
-  fastify.addHook("preHandler", (request, reply, done) => {
-    console.log("authz check!");
-    const userId = "1";
-    request.auth = {
-      userId,
-    };
-    done();
+  firebaseAdmin.initializeApp({
+    projectId: config.firebase.projectId,
+    credential: applicationDefault(),
   });
 
-  fastify.get("/auth/csrf", async (request, reply) => {
-    const token = await reply.generateCsrf();
-    return {
-      token,
-    };
-  });
+  const authzService = fastify.service.authz;
+
+  fastify.decorateRequest("userId", null);
+
+  fastify.decorate(
+    "authUser",
+    (request: FastifyRequest, reply: FastifyReply, done: () => void) => {
+      const { at, rt } = request.cookies;
+      if (at === undefined) {
+        throw new AppError(
+          commonErrors.authorizationError,
+          "Empty access token",
+          true,
+          401
+        );
+      }
+      if (rt === undefined) {
+        throw new AppError(
+          commonErrors.authorizationError,
+          "Empty refresh token",
+          true,
+          401
+        );
+      }
+
+      // automatically regenerates access token when it expires
+      authzService
+        .validateAuthTokens(at, rt)
+        .then(({ uid, newAccessToken }) => {
+          request.userId = uid;
+          console.log(request.userId);
+          if (newAccessToken !== undefined) {
+            reply.setCookie("at", newAccessToken, {
+              httpOnly: true,
+            });
+          }
+          done();
+        });
+    }
+  );
+
+  const newTokenJsonSchema = {
+    body: {
+      type: "object",
+      required: ["idToken"],
+      properties: {
+        idToken: { type: "string" },
+      },
+    },
+  };
 
   /**
-   * default: issues an access token and refresh token
-   * grantType: "refresh_token" => issues a new access token
-   *   if the regeneration of access token fails, force client page to sign out and re-sign in
+   * issues an access token and refresh token
+   * this route can be used for both sign-in and sign-up
    */
-  fastify.post("/auth/token", async (request, reply) => {
-    return { token: "some-token" };
-  });
+  fastify.post<{ Body: { idToken: string } }>(
+    "/auth/sign-in",
+    {
+      schema: newTokenJsonSchema,
+    },
+    async (request, reply) => {
+      try {
+        const { idToken } = request.body;
+        const decodedToken = await firebaseAdminAuth
+          .getAuth()
+          .verifyIdToken(idToken);
+
+        const { accessToken, refreshToken } = await authzService.generateTokens(
+          decodedToken.uid
+        );
+        reply
+          .setCookie("at", accessToken, {
+            httpOnly: true,
+          })
+          .setCookie("rt", refreshToken, {
+            httpOnly: true,
+          })
+          .send();
+      } catch (error) {
+        if (error instanceof Error) {
+          fastify.log.warn(error.message);
+          throw new AppError(
+            commonErrors.authorizationError,
+            "invalid auth info for sign-in",
+            true
+          );
+        }
+      }
+    }
+  );
+
+  fastify.get(
+    "/auth/csrf",
+    {
+      onRequest: fastify.authUser,
+    },
+    async (request, reply) => {
+      const token = await reply.generateCsrf();
+      return {
+        token,
+      };
+    }
+  );
 }
 
 export default fp(plugin);

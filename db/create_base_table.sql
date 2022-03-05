@@ -2,9 +2,7 @@
 -- - A user of this SQL script must be admin user
 CREATE ROLE lot_server_user WITH NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT LOGIN NOREPLICATION NOBYPASSRLS PASSWORD 'y2.QX_GrVce.iJWL';
 
-CREATE DATABASE lot OWNER lot_server_user TABLESPACE pg_default
-
-CREATE SCHEMA IF NOT EXISTS lot AUTHORIZATION lot_server_user;
+CREATE DATABASE lot OWNER lot_server_user TABLESPACE pg_default CREATE SCHEMA IF NOT EXISTS lot AUTHORIZATION lot_server_user;
 
 SET SCHEMA
   'lot';
@@ -49,13 +47,13 @@ CREATE TABLE IF NOT EXISTS preferences (
   PRIMARY KEY (user_id)
 );
 
+-- MAYBE UNNECESSARY
 CREATE TABLE IF NOT EXISTS refresh_token (
   user_id VARCHAR(100) NOT NULL,
-  refresh_token VARCHAR(128) NOT NULL,
   user_agent VARCHAR(128) NOT NULL,
   valid_from BIGINT NOT NULL,
   valid_to BIGINT NOT NULL,
-  PRIMARY KEY (user_id, refresh_token)
+  PRIMARY KEY (user_id, user_agent)
 );
 
 GRANT

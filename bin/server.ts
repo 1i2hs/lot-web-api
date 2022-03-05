@@ -25,7 +25,7 @@ async function start() {
     console.log(`Server is down because of`, error.message);
   });
 
-  fastifyApp.listen(3000, (error) => {
+  fastifyApp.listen(3100, (error) => {
     if (error) {
       fastifyApp.log.error(error);
       process.exit(1);
