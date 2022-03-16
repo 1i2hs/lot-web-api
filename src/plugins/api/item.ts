@@ -73,7 +73,10 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
     };
   }>(
     "/items",
-    { schema: newItemJsonSchema, onRequest: fastify.csrfProtection },
+    {
+      schema: newItemJsonSchema,
+      onRequest: [fastify.csrfProtection, fastify.authUser],
+    },
     async (request, reply) => {
       const userId = request.userId;
       const {
@@ -147,7 +150,10 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
 
   fastify.get<{ Params: { id: number } }>(
     "/items/:id",
-    { schema: singleItemJsonSchema },
+    {
+      schema: singleItemJsonSchema,
+      onRequest: [fastify.csrfProtection, fastify.authUser],
+    },
     async (request, reply) => {
       const userId = request.userId;
       const { id } = request.params;
@@ -265,60 +271,67 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
       lifeSpanLeftMin: number;
       lifeSpanLeftMax: number;
     };
-  }>("/items", { schema: multipleItemJsonSchema }, async (request, reply) => {
-    const userId = request.userId;
-    const {
-      cursor,
-      base,
-      order,
-      name,
-      alias,
-      purchasedTimeRangeMin,
-      purchasedTimeRangeMax,
-      valueRangeMin,
-      valueRangeMax,
-      currencyCode,
-      lifeSpanRangeMin,
-      lifeSpanRangeMax,
-      isFavorite,
-      isArchived,
-      currentValueMin,
-      currentValueMax,
-      lifeSpanLeftMin,
-      lifeSpanLeftMax,
-    } = request.query;
+  }>(
+    "/items",
+    {
+      schema: multipleItemJsonSchema,
+      onRequest: [fastify.csrfProtection, fastify.authUser],
+    },
+    async (request, reply) => {
+      const userId = request.userId;
+      const {
+        cursor,
+        base,
+        order,
+        name,
+        alias,
+        purchasedTimeRangeMin,
+        purchasedTimeRangeMax,
+        valueRangeMin,
+        valueRangeMax,
+        currencyCode,
+        lifeSpanRangeMin,
+        lifeSpanRangeMax,
+        isFavorite,
+        isArchived,
+        currentValueMin,
+        currentValueMax,
+        lifeSpanLeftMin,
+        lifeSpanLeftMax,
+      } = request.query;
 
-    const items = await itemService.getItems(userId, {
-      cursor: { base, order, value: cursor },
-      name,
-      alias,
-      purchasedTimeRange: {
-        min: purchasedTimeRangeMin,
-        max: purchasedTimeRangeMax,
-      },
-      valueRange: {
-        min: valueRangeMin,
-        max: valueRangeMax,
-      },
-      lifeSpanRange: {
-        min: lifeSpanRangeMin,
-        max: lifeSpanRangeMax,
-      },
-      currencyCode,
-      isFavorite,
-      isArchived,
-      currentValueRange: {
-        min: currentValueMin,
-        max: currentValueMax,
-      },
-      lifeSpanLeftRange: {
-        min: lifeSpanLeftMin,
-        max: lifeSpanLeftMax,
-      },
-    });
+      const items = await itemService.getItems(userId, {
+        cursor: { base, order, value: cursor },
+        name,
+        alias,
+        purchasedTimeRange: {
+          min: purchasedTimeRangeMin,
+          max: purchasedTimeRangeMax,
+        },
+        valueRange: {
+          min: valueRangeMin,
+          max: valueRangeMax,
+        },
+        lifeSpanRange: {
+          min: lifeSpanRangeMin,
+          max: lifeSpanRangeMax,
+        },
+        currencyCode,
+        isFavorite,
+        isArchived,
+        currentValueRange: {
+          min: currentValueMin,
+          max: currentValueMax,
+        },
+        lifeSpanLeftRange: {
+          min: lifeSpanLeftMin,
+          max: lifeSpanLeftMax,
+        },
+      });
 
-    return items;
-  });
+      return items;
+    }
+  );
 
   const singleItemUpdateJsonSchema = {
     params: {
@@ -386,7 +399,7 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
     },
   };
 
-  fastify.put<{
+  fastify.patch<{
     Params: { id: number };
     Body: {
       name: string;
@@ -402,7 +415,10 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
     };
   }>(
     "/items/:id",
-    { schema: singleItemUpdateJsonSchema, onRequest: fastify.csrfProtection },
+    {
+      schema: singleItemUpdateJsonSchema,
+      onRequest: [fastify.csrfProtection, fastify.authUser],
+    },
     async (request, reply) => {
       const { id } = request.params;
       const userId = request.userId;
@@ -456,7 +472,10 @@ async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
 
   fastify.delete<{ Params: { id: number } }>(
     "/items/:id",
-    { schema: singleItemDeleteJsonSchema, onRequest: fastify.csrfProtection },
+    {
+      schema: singleItemDeleteJsonSchema,
+      onRequest: [fastify.csrfProtection, fastify.authUser],
+    },
     async (request, reply) => {
       const { id } = request.params;
       const userId = request.userId;
