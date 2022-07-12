@@ -1,6 +1,6 @@
 import { FastifyLoggerInstance } from "fastify";
 import { TagModule } from "../core";
-import { Tag } from "../model";
+import { Tag } from "../type/app";
 
 class TagService {
   private readonly tagModule: TagModule;

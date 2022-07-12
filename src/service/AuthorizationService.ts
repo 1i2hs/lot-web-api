@@ -2,7 +2,7 @@ import { FastifyLoggerInstance } from "fastify";
 import * as jwt from "jsonwebtoken";
 import config from "../config";
 import { AppError } from "../error";
-import { AuthToken } from "../types";
+import { AuthToken } from "../type/app";
 
 class AuthorizationService {
   private readonly logger: FastifyLoggerInstance;

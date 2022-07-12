@@ -1,7 +1,6 @@
 import { FastifyLoggerInstance } from "fastify";
 import { ItemModule } from "../core";
-import { Item, Tag } from "../model";
-import { ItemFilterOption } from "../types";
+import { Item, Tag, ItemFilterOption } from "../type/app";
 
 class ItemService {
   private readonly itemModule: ItemModule;

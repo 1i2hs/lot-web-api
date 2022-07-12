@@ -2,11 +2,15 @@ import { FastifyLoggerInstance } from "fastify";
 import dayjs from "dayjs";
 import "dayjs/plugin/utc.js";
 import { IDBPool } from "../data-access";
-import { Item, Tag } from "../model";
+import {
+  Item,
+  Tag,
+  PaginatedData,
+  ItemFilterOption,
+  ItemCursorBase,
+} from "../type/app";
 import { AppError, commonErrors } from "../error";
 import * as util from "../misc/util";
-import { ItemFilterOption, ItemCursorBase } from "../types";
-import PaginatedData from "../model/PaginatedData";
 
 class ItemModule {
   private readonly dbPool: IDBPool;

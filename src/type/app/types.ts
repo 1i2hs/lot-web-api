@@ -1,4 +1,4 @@
-import { PaginationCursor } from "./model";
+import { PaginationCursor } from ".";
 
 export type ItemFilterOption = {
   cursor?: PaginationCursor;

@@ -1,7 +1,7 @@
 import { FastifyLoggerInstance } from "fastify";
 import { IDBPool } from "../data-access";
 import { AppError, commonErrors } from "../error";
-import { Tag } from "../model";
+import { Tag } from "../type/app";
 
 class TagModule {
   private readonly dbPool: IDBPool;

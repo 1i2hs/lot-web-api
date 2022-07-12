@@ -1,4 +1,4 @@
-import { Tag } from ".";
+import Tag from "./Tag.interface";
 
 interface Item {
   id: number;

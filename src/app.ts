@@ -1,8 +1,8 @@
 import fastify, { FastifyInstance, FastifyServerOptions } from "fastify";
-import cors from "fastify-cors";
-import helmet from "fastify-helmet";
-import cookie from "fastify-cookie";
-import csrf from "fastify-csrf";
+import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
+import cookie from "@fastify/cookie";
+import csrf from "@fastify/csrf-protection";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 
@@ -20,6 +20,7 @@ async function build(option: FastifyServerOptions) {
   const errorHandler = new ErrorHandler(app.log);
 
   app.setErrorHandler(async (error, request, reply) => {
+    console.log("aaaaa");
     await errorHandler.handleError(error, request, reply);
 
     // if (

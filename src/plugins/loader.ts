@@ -39,14 +39,14 @@ async function plugin(fastify: FastifyInstance, option: FastifyPluginOptions) {
   // data-access
   const sqlPool = new PostgreSQLPool(pgPool, fastify.log);
 
-  if (!(await sqlPool.isConnected())) {
-    throw new AppError(
-      commonErrors.databaseError,
-      "Cannot connect to the DB. Please check the status of the DB",
-      false,
-      500
-    );
-  }
+  // if (!(await sqlPool.isConnected())) {
+  //   throw new AppError(
+  //     commonErrors.databaseError,
+  //     "Cannot connect to the DB. Please check the status of the DB",
+  //     false,
+  //     500
+  //   );
+  // }
   fastify.log.info("DB Connection Ready");
 
   fastify.addHook("onClose", async (instance) => {

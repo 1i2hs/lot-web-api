@@ -1,6 +1,5 @@
 import { FastifyInstance, FastifyPluginOptions, FastifyRequest } from "fastify";
-import { Tag } from "../../model";
-import { ItemCursorBase } from "../../types";
+import { Tag, ItemCursorBase } from "../../type/app";
 
 async function plugin(fastify: FastifyInstance, options: FastifyPluginOptions) {
   const itemService = fastify.service.item;

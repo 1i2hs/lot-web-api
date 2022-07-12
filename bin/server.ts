@@ -8,7 +8,12 @@ async function start() {
 
   const fastifyApp = await app.build({
     logger: {
-      prettyPrint: process.env.NODE_ENV === "production" ? false : true,
+      transport:
+        process.env.NODE_ENV === "production"
+          ? {
+              target: "pino-pretty",
+            }
+          : undefined,
       level: config.logs.level,
     },
   });
@@ -25,7 +30,7 @@ async function start() {
     console.log(`Server is down because of`, error.message);
   });
 
-  fastifyApp.listen(3100, (error) => {
+  fastifyApp.listen({ port: 3000, host: "0.0.0.0" }, (error) => {
     if (error) {
       fastifyApp.log.error(error);
       process.exit(1);
